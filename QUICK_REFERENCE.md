@@ -4,12 +4,9 @@
 
 ### First Time Setup
 
-```powershell
-# Windows
-.\setup.ps1
-
-# Linux/WSL
-bash setup.sh
+```bash
+python -m venv venv
+venv/bin/pip install -r requirements.txt   # or venv\Scripts\pip on Windows
 ```
 
 ### Daily Usage
@@ -49,8 +46,8 @@ python 1_login/1_login.py
 # Login with QR code
 python 1_login/1_login_by_qr.py
 
-# Verify login
-python 2_verify/2_verify_login.py
+# Verify login (scans all sessions/)
+python 2_verify/2_verify_login_advanced.py
 ```
 
 ### Chat Management
@@ -140,19 +137,9 @@ rm sessions/*.session
 python 1_login/1_login.py
 ```
 
-### Permission Errors (WSL)
-
-```bash
-# Make scripts executable
-chmod +x setup.sh
-chmod +x wsl_setup.sh
-```
-
 ## 📚 Documentation Files
 
-- `README.md` - Main project documentation
-- `ORGANIZATION.md` - Structure and improvements
-- `docs/ACTION_REQUIRED.md` - Required setup actions
+- `CLAUDE.md` - Architecture and conventions (for AI-assisted development)
 - `docs/QUICK_START_WSL.md` - WSL quick start
 - `docs/WSL_SETUP_GUIDE.md` - Detailed WSL guide
 - `docs/GUIDELINES.md` - Development guidelines
