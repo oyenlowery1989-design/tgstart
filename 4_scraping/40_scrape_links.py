@@ -29,8 +29,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Telegram API credentials
-API_ID = int(os.getenv("MAIN_API_ID", os.getenv("API_ID", REDACTED_API_ID)))
-API_HASH = os.getenv("MAIN_API_HASH", os.getenv("API_HASH", "REDACTED_API_HASH"))
+API_ID = int(os.getenv("MAIN_API_ID", os.getenv("API_ID", 0)))
+API_HASH = os.getenv("MAIN_API_HASH", os.getenv("API_HASH", ""))
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Session name (reuses existing session if present)

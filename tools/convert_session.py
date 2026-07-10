@@ -49,8 +49,8 @@ if not os.path.isabs(SESSION_NAME):
     SESSION_NAME = os.path.join(ROOT_DIR, SESSION_NAME)
 
 # Your Telegram API credentials (loaded from .env)
-API_ID = int(os.getenv("MAIN_API_ID", os.getenv("API_ID", REDACTED_API_ID)))
-API_HASH = os.getenv("MAIN_API_HASH", os.getenv("API_HASH", "REDACTED_API_HASH"))
+API_ID = int(os.getenv("MAIN_API_ID", os.getenv("API_ID", 0)))
+API_HASH = os.getenv("MAIN_API_HASH", os.getenv("API_HASH", ""))
 
 # Output directory for tdata
 OUTPUT_DIR = "./tdata_exports"
