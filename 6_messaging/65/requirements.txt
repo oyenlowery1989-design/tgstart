@@ -1,0 +1,8 @@
+telethon
+python-dotenv
+loguru
+aiofiles
+fastapi
+uvicorn
+jinja2
+python-multipart

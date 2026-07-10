@@ -1,0 +1,84 @@
+# Environment and credentials
+.env
+*.env
+.env.*
+*.env.local
+
+# Session files (contain sensitive authentication data)
+sessions/
+*.session
+*.session-journal
+
+# Telegram data exports
+tdata_exports/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+.venv_linux/
+
+# Archived/superseded code (kept locally, not tracked)
+6_messaging/_archived/
+
+# Generated data files
+*.csv
+*.log
+*_data/
+*.db
+*.sqlite
+*.sqlite3
+6_messaging/65/data/
+
+# Keep data folder structure but ignore contents
+99_data/*
+!99_data/.gitkeep
+30_data/*
+!30_data/.gitkeep
+31_data/*
+!31_data/.gitkeep
+41_data/*
+!41_data/.gitkeep
+61_data/*
+!61_data/.gitkeep
+62_data/*
+!62_data/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/

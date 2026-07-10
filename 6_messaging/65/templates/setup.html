@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1>Setup & Mapping</h1>
+        <small class="badge badge-info">Total Sources: {{ chats|length }}</small>
+    </div>
+
+    <div class="filter-form">
+        <form method="GET" action="/setup">
+            <input type="text" name="q" placeholder="Filter by Title..." value="{{ query }}">
+            <button type="submit">Filter</button>
+        </form>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Monitor</th>
+                <th>Source Chat</th>
+                <th>Type</th>
+                <th>Backup Destination</th>
+                <th>Status</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for chat in chats %}
+            <tr id="row-{{ chat.chat_id }}">
+                <td style="text-align: center;">
+                    <!-- Use standard checkbox for mapping flow, or switch if preferred -->
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="monitored-{{ chat.chat_id }}" {% if chat.monitored %}checked{% endif %}>
+                        <span class="slider"></span>
+                    </label>
+                </td>
+                <td>
+                    <strong>{{ chat.title }}</strong><br>
+                    <small style="color:#6c757d;">{{ chat.chat_id }}</small>
+                </td>
+                <td><span class="badge badge-primary">{{ chat.type }}</span></td>
+                <td>
+                    <select id="backup-{{ chat.chat_id }}" style="width: 100%; max-width: 300px; padding: 5px;">
+                        <option value="">-- No Backup / Select --</option>
+                        {% for dest in destinations %}
+                        <!-- Prevent selecting self as backup -->
+                        {% if dest.chat_id != chat.chat_id %}
+                        <option value="{{ dest.chat_id }}" {% if chat.backup_chat_id == dest.chat_id %}selected{% endif %}>
+                            {{ dest.title }} ({{ dest.chat_id }})
+                        </option>
+                        {% endif %}
+                        {% endfor %}
+                    </select>
+                </td>
+                <td id="status-{{ chat.chat_id }}">
+                    {% if chat.monitored and not chat.backup_chat_id %}
+                    <span class="badge badge-warning">No Backup Set!</span>
+                    {% elif chat.monitored %}
+                    <span class="badge badge-success">Active</span>
+                    {% else %}
+                    <span style="color: #ccc;">Inactive</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <button onclick="saveMapping('{{ chat.chat_id }}')" class="btn-save">Save</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+async function saveMapping(chatId) {
+    const monitored = document.getElementById(`monitored-${chatId}`).checked;
+    const backupSelect = document.getElementById(`backup-${chatId}`);
+    const backupId = backupSelect.value ? parseInt(backupSelect.value) : null;
+    
+    // Status update
+    const statusCell = document.getElementById(`status-${chatId}`);
+    statusCell.innerHTML = '<span class="badge badge-info">Saving...</span>';
+    
+    try {
+        const response = await fetch('/api/chat_mapping', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: parseInt(chatId),
+                monitored: monitored,
+                backup_chat_id: backupId
+            })
+        });
+        
+        if (response.ok) {
+            // Update UI status
+            // Wait slightly for visual confirmation
+            setTimeout(() => {
+                if (monitored && !backupId) {
+                statusCell.innerHTML = '<span class="badge badge-warning">No Backup Set!</span>';
+                } else if (monitored) {
+                    statusCell.innerHTML = '<span class="badge badge-success">Active</span>';
+                } else {
+                    statusCell.innerHTML = '<span style="color: #ccc;">Inactive</span>';
+                }
+            }, 500);
+            
+        } else {
+            statusCell.innerHTML = '<span class="badge badge-danger">Error</span>';
+            const txt = await response.text();
+            alert("Failed to save mapping: " + txt);
+        }
+    } catch (e) {
+        console.error(e);
+        statusCell.innerHTML = '<span class="badge badge-danger">Net Error</span>';
+    }
+}
+</script>
+
+<style>
+.btn-save {
+    background-color: #28a745;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+}
+.btn-save:hover {
+    background-color: #218838;
+}
+</style>
+{% endblock %}

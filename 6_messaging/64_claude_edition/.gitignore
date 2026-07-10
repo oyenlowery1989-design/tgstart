@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+
+# Telegram Sessions
+*.session
+*.session-journal
+sessions/
+
+# Sensitive Config
+.env
+
+# Local Data & Logs
+data/logs/
+data/backups/
+data/archived_logs/
+data/crash_log.jsonl
+data/users/
+data/mirrors.json
+
+# If you want to keep mirrors.json structure but not the data, 
+# it's usually better to just ignore it and set it up via the menu.
+
+# System/IDE
+.DS_Store
+.vscode/
+.idea/
+.agent/
+.gemini/

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1>Events Log</h1>
+        <small class="badge badge-info">Total Events: {{ total_events }}</small>
+    </div>
+    
+    <div class="filter-form">
+        <form method="GET" action="/events">
+            <select name="type">
+                <option value="">All Events</option>
+                <option value="message_new" {% if type_filter == 'message_new' %}selected{% endif %}>New Message</option>
+                <option value="message_edit" {% if type_filter == 'message_edit' %}selected{% endif %}>Edits</option>
+                <option value="message_delete" {% if type_filter == 'message_delete' %}selected{% endif %}>Deletes</option>
+                <option value="user_join" {% if type_filter == 'user_join' %}selected{% endif %}>Joins</option>
+                <option value="user_leave" {% if type_filter == 'user_leave' %}selected{% endif %}>Leaves</option>
+                <option value="mirror_failed_total" {% if type_filter == 'mirror_failed_total' %}selected{% endif %}>Failures</option>
+            </select>
+            <button type="submit">Filter</button>
+        </form>
+    </div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Event ID</th>
+                <th>Time (UTC)</th>
+                <th>Chat ID</th>
+                <th>Type</th>
+                <th>Details</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for e in events %}
+            <tr>
+                <td><small>{{ e.event_id|truncate(8, True) }}</small></td>
+                <td>{{ e.ts }}</td>
+                <td>{{ e.chat_id }}</td>
+                <td><span class="badge badge-secondary">{{ e.event_type }}</span></td>
+                <td><div class="code-block">{{ e.summary_json }}</div></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    
+    <div class="pagination">
+        {% if page > 1 %}
+        <a href="?page={{ page - 1 }}&type={{ type_filter }}">&laquo; Prev</a>
+        {% endif %}
+        <span>Page {{ page }} of {{ total_pages }}</span>
+        {% if page < total_pages %}
+        <a href="?page={{ page + 1 }}&type={{ type_filter }}">Next &raquo;</a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

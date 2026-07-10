@@ -1,0 +1,12 @@
+[
+  {
+    "chat_id": -1001234567890,
+    "title": "Example Monitored Group",
+    "backup_chat_id": -1009876543210,
+    "defaults": {
+      "mirror_new": true,
+      "edits": true,
+      "deletes": true
+    }
+  }
+]
