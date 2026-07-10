@@ -107,13 +107,19 @@
                     
                     const summary = (typeof e.summary_json === 'string' ? e.summary_json : JSON.stringify(e.summary_json)).substring(0, 80) + "...";
 
-                    row.innerHTML = `
-                        <td>${e.ts}</td>
-                        <td>${e.chat_id}</td>
-                        <td><span class="badge badge-info">${e.event_type}</span></td>
-                        <td>${e.actor_user_id || 'None'}</td>
-                        <td>${summary}</td>
-                    `;
+                    const cellValues = [e.ts, e.chat_id, null, e.actor_user_id || 'None', summary];
+                    cellValues.forEach((val, i) => {
+                        const td = document.createElement("td");
+                        if (i === 2) {
+                            const badge = document.createElement("span");
+                            badge.className = "badge badge-info";
+                            badge.textContent = e.event_type;
+                            td.appendChild(badge);
+                        } else {
+                            td.textContent = val;
+                        }
+                        row.appendChild(td);
+                    });
                     if (tbody.firstChild) {
                         tbody.insertBefore(row, tbody.firstChild);
                     } else {

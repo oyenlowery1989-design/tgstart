@@ -104,9 +104,16 @@
                             </label>
                         </div>
                         <div>
-                            Bio: 
+                            Bio:
                             <label class="toggle-switch">
                                 <input type="checkbox" onclick="toggleConfig('{{ chat.chat_id }}', 'toggle_bio_worker', this.checked); return true;" {% if chat.toggle_bio_worker %}checked{% endif %}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div>
+                            Reactions:
+                            <label class="toggle-switch">
+                                <input type="checkbox" onclick="toggleConfig('{{ chat.chat_id }}', 'toggle_reactions', this.checked); return true;" {% if chat.toggle_reactions %}checked{% endif %}>
                                 <span class="slider"></span>
                             </label>
                         </div>

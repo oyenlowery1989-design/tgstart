@@ -134,10 +134,11 @@ async def chats_list(request: Request, page: int = 1):
     
     # Left Join with Config to get toggles
     query = """
-        SELECT c.*, 
-               cfg.toggle_mirror_new, cfg.toggle_log_new, 
+        SELECT c.*,
+               cfg.toggle_mirror_new, cfg.toggle_log_new,
                cfg.toggle_edits, cfg.toggle_deletes, cfg.toggle_joins,
-               cfg.toggle_admin, cfg.toggle_restrict, cfg.toggle_invites, cfg.toggle_bots, cfg.toggle_bio_worker
+               cfg.toggle_admin, cfg.toggle_restrict, cfg.toggle_invites, cfg.toggle_bots, cfg.toggle_bio_worker,
+               cfg.toggle_reactions
         FROM chats c
         LEFT JOIN config cfg ON c.chat_id = cfg.chat_id
         ORDER BY c.title ASC
@@ -223,14 +224,16 @@ async def api_toggle(chat_id: int, key: str, value: int = Query(...)):
     """
     Flip a toggle key for a chat.
     Valid keys based on config schema:
-    toggle_mirror_new, toggle_log_new, 
+    toggle_mirror_new, toggle_log_new,
     toggle_edits, toggle_deletes, toggle_joins,
-    toggle_admin, toggle_restrict, toggle_invites, toggle_bots, toggle_bio_worker
+    toggle_admin, toggle_restrict, toggle_invites, toggle_bots, toggle_bio_worker,
+    toggle_reactions
     """
     valid_keys = [
-        "toggle_mirror_new", "toggle_log_new", 
+        "toggle_mirror_new", "toggle_log_new",
         "toggle_edits", "toggle_deletes", "toggle_joins",
-        "toggle_admin", "toggle_restrict", "toggle_invites", "toggle_bots", "toggle_bio_worker"
+        "toggle_admin", "toggle_restrict", "toggle_invites", "toggle_bots", "toggle_bio_worker",
+        "toggle_reactions"
     ]
     if key not in valid_keys:
         raise HTTPException(400, "Invalid key")
