@@ -423,6 +423,23 @@ class GhostRunner:
         self._bio_queue = asyncio.Queue()
         self._bio_processed = set()
 
+        # Dedup state for invite-join notifications: {(chat_id, user_id): last_claimed_ts}.
+        # A join-via-link fires both a ChatAction event and a separate raw
+        # UpdateChatInviteImporter update - without this, both handlers would notify.
+        self._invite_join_claims = {}
+
+    def _claim_invite_join(self, chat_id, user_id) -> bool:
+        """First caller within the dedup window wins and should proceed; later callers
+        for the same (chat_id, user_id) within the window are duplicates and should skip."""
+        now = datetime.datetime.now(datetime.timezone.utc).timestamp()
+        key = (chat_id, user_id)
+        last = self._invite_join_claims.get(key)
+        self._invite_join_claims[key] = now
+        if len(self._invite_join_claims) > 500:
+            for k in list(self._invite_join_claims.keys())[:250]:
+                self._invite_join_claims.pop(k, None)
+        return last is None or (now - last) >= 10
+
     def _record_user_seen(self, user_id, username=None, first_name=None, last_name=None, is_bot=None):
         """Upsert basic sighting info into the users table. Fields we don't have yet
         (None) leave the existing stored value untouched via COALESCE."""
@@ -831,11 +848,14 @@ class GhostRunner:
                     action_type = "bot_join"
                     gate_toggle = "toggle_bots"
                 elif action_message and isinstance(getattr(action_message, "action", None), tl_types.MessageActionChatJoinedByLink):
-                    inviter_id = action_message.action.inviter_id
-                    inviter_label = "Anonymous Admin" if inviter_id == ANONYMOUS_ADMIN_ID else self._get_display_name(inviter_id)
-                    action_text = f"🔗 User joined via link: {user_label} (by {inviter_label})"
-                    action_type = "invite_join"
-                    gate_toggle = "toggle_invites"
+                    # UpdateChatInviteImporter fires separately for the same join; only one
+                    # of the two handlers should notify.
+                    if self._claim_invite_join(chat_id, user_id):
+                        inviter_id = action_message.action.inviter_id
+                        inviter_label = "Anonymous Admin" if inviter_id == ANONYMOUS_ADMIN_ID else self._get_display_name(inviter_id)
+                        action_text = f"🔗 User joined via link: {user_label} (by {inviter_label})"
+                        action_type = "invite_join"
+                        gate_toggle = "toggle_invites"
             elif event.user_left and is_bot:
                 action_text = f"🤖 Bot left: {user_label}"
                 action_type = "bot_leave"
@@ -903,6 +923,11 @@ class GhostRunner:
 
             user_id = getattr(event, "user_id", None)
             if not user_id:
+                return
+
+            # The ChatAction-embedded link detection fires separately for the same join;
+            # only one of the two handlers should notify.
+            if not self._claim_invite_join(chat_id, user_id):
                 return
 
             admin_id = None
