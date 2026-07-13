@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Login (Phone){% endblock %}
+{% block content %}
+<h1>Login via Phone Number</h1>
+<div id="step-phone">
+  <input id="phone" type="text" placeholder="+1234567890" />
+  <button onclick="sendPhone()">Send code</button>
+</div>
+<div id="step-code" style="display:none">
+  <input id="code" type="text" placeholder="Code from Telegram" />
+  <button onclick="sendCode()">Submit code</button>
+</div>
+<div id="step-2fa" style="display:none">
+  <input id="password" type="password" placeholder="2FA password" />
+  <button onclick="send2fa()">Submit password</button>
+</div>
+<div id="result"></div>
+<script>
+  let flowId = null;
+  async function post(url, data) {
+    const body = new URLSearchParams(data);
+    const resp = await fetch(url, { method: "POST", body });
+    return resp.json();
+  }
+  async function sendPhone() {
+    const phone = document.getElementById("phone").value;
+    const r = await post("/sessions/login/phone", { phone });
+    if (r.status === "code_sent") {
+      flowId = r.flow_id;
+      document.getElementById("step-phone").style.display = "none";
+      document.getElementById("step-code").style.display = "block";
+    } else {
+      document.getElementById("result").textContent = r.error;
+    }
+  }
+  async function sendCode() {
+    const code = document.getElementById("code").value;
+    const r = await post("/sessions/login/code", { flow_id: flowId, code });
+    if (r.status === "done") {
+      window.location.href = "/sessions";
+    } else if (r.status === "need_2fa") {
+      document.getElementById("step-code").style.display = "none";
+      document.getElementById("step-2fa").style.display = "block";
+    } else {
+      document.getElementById("result").textContent = r.error;
+    }
+  }
+  async function send2fa() {
+    const password = document.getElementById("password").value;
+    const r = await post("/sessions/login/2fa", { flow_id: flowId, password });
+    if (r.status === "done") {
+      window.location.href = "/sessions";
+    } else {
+      document.getElementById("result").textContent = r.error;
+    }
+  }
+</script>
+{% endblock %}
