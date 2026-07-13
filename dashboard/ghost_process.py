@@ -12,4 +12,8 @@ def start_ghost_bot() -> subprocess.Popen:
 
 def stop_ghost_bot(proc: subprocess.Popen) -> None:
     proc.terminate()
-    proc.wait()
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
