@@ -68,16 +68,15 @@ def main():
         table.add_column("Icon", width=3)
         table.add_column("Description", style="white")
 
-        table.add_row("1", "🔑", "Login / Add New Account")
-        table.add_row("2", "🔍", "Verify & List Sessions")
-        table.add_row("3", "💬", "List My Chats/Groups")
-        table.add_row("4", "👥", "List Users in a Group")
-        table.add_row("5", "🔗", "Extract Links from Group")
-        table.add_row("6", "📊", "Group Analytics & Stats")
-        table.add_row("7", "🛡️", "Ghost Mirror - Claude Edition (Forensics)")
-        table.add_row("8", "🛰️", "Ghost Mirror - Dashboard (v4.0)")
-        table.add_row("11", "🔍", "Find Chats with My Messages")
-        table.add_row("12", "🧹", "Self-Destruct (Purge My Messages)")
+        table.add_row("1", "🔑", "Login / Add New Account [dim]- create a session (phone code or QR), saved to sessions/[/dim]")
+        table.add_row("2", "🔍", "Verify & List Sessions [dim]- check saved sessions are still logged in[/dim]")
+        table.add_row("3", "💬", "List My Chats/Groups [dim]- export all your dialogs to CSV[/dim]")
+        table.add_row("4", "👥", "List Users in a Group [dim]- scrape a group's member list[/dim]")
+        table.add_row("5", "🔗", "Extract Links from Group [dim]- scan message history for URLs[/dim]")
+        table.add_row("6", "📊", "Group Analytics & Stats [dim]- message/activity counts for a group[/dim]")
+        table.add_row("8", "🛰️", "Ghost Mirror - Dashboard (v4.0) [dim]- mirror bot + config UI at localhost:8000[/dim]")
+        table.add_row("11", "🔍", "Find Chats with My Messages [dim]- audit which chats you've posted in[/dim]")
+        table.add_row("12", "🧹", "Self-Destruct (Purge My Messages) [dim]- delete your own messages in a chosen chat[/dim]")
         table.add_row("", "", "")
         table.add_row("0", "🚪", "Exit")
 
@@ -97,8 +96,6 @@ def main():
             run_script("4_scraping/41_scrape_links_advanced.py")
         elif choice == "6":
             run_script("5_monitoring/50_group_stats.py")
-        elif choice == "7":
-            run_script("run.py", cwd="6_messaging/64_claude_edition")
         elif choice == "8":
             run_dashboard_pair(cwd="6_messaging/65")
         elif choice == "11":

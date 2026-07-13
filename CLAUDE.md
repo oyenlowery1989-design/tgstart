@@ -16,9 +16,8 @@ venv/bin/pip install -r requirements.txt   # or venv\Scripts\pip on Windows
 python run.py                              # interactive menu, choice 0 to exit
 ```
 
-`6_messaging/64_claude_edition/` and `6_messaging/65/` each have their **own** `requirements.txt` and are meant to run in their own venv (installed separately, not from the root `requirements.txt`). Root `run.py` choices 7/8 launch them as subprocesses:
+`6_messaging/65/` has its **own** `requirements.txt` and is meant to run in its own venv (installed separately, not from the root `requirements.txt`). Root `run.py` choice 8 launches it as a subprocess pair:
 
-- Choice 7 → `6_messaging/64_claude_edition/run.py` (a supervisor loop around `ghost_runner.py`)
 - Choice 8 → starts `6_messaging/65/run.py` (bot) in the background, then `6_messaging/65/dashboard.py` (FastAPI UI, `http://127.0.0.1:8000`) in the foreground
 
 There is no test suite, linter config, or CI in this repo — don't assume `pytest`/`ruff`/etc. exist. `python -m py_compile <file>` is the only verification available for a quick syntax check.
@@ -42,11 +41,10 @@ Scripts prefer `MAIN_API_ID`/`MAIN_API_HASH`, falling back to `API_ID`/`API_HASH
 
 Privacy/safety-sensitive behavior is opt-in via env flags, off by default: `EXPORT_PHONE_NUMBERS` and `AGGRESSIVE_SCRAPE` in `3_chat_management/31_list_group_users.py`.
 
-### `6_messaging/`: two independent Ghost Mirror implementations
+### `6_messaging/`: Ghost Mirror
 
-Both mirror messages between a source chat and a backup chat, but with different architectures — they are **not** interchangeable versions, both are intentionally kept:
+`65/` is the live, maintained Ghost Mirror implementation. The older `64_claude_edition/` (CLI-only, modular `src/{config,core,handlers,utils}/` layout, JSON/JSONL file-based persistence) has been retired and archived to `6_messaging/_archived_64_claude_edition/` — its feature set was merged into `65`'s dashboard architecture in commit d636a73, and it is no longer wired into `run.py`. Treat it as history, not a parallel design.
 
-- **`64_claude_edition/`**: CLI-only, modular `src/{config,core,handlers,utils}/` layout, one handler class per event type, JSON/JSONL file-based persistence (`data/mirrors.json`, `data/history/*.json`, `data/users/*.json`). No web UI.
 - **`65/`**: FastAPI dashboard (`dashboard.py`) + monolithic `ghost_runner.py` (Telethon client, SQLite `DatabaseManager`/`ConfigManager`/`AuditLogger`, all event handling in one file) + SQLite backend (`data/ghost.db`) with schema migrations gated by `PRAGMA user_version`. Per-chat config toggles (`toggle_mirror_new`, `toggle_edits`, `toggle_admin`, `toggle_reactions`, etc.) live in the `config` table and hot-reload into the running bot within ~2s via a polled `config_bump` timestamp — no restart needed to change a chat's settings from the dashboard.
 
 `65`'s dashboard is gated by HTTP Basic auth (`DASHBOARD_USER`/`DASHBOARD_PASSWORD`); if unset, it only binds loopback — it refuses to start bound to a non-loopback host without a password set (fail-closed by design, see the startup check in `dashboard.py`).

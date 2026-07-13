@@ -90,18 +90,21 @@ async def main():
         return
 
     console.print("\n[bold]Found the following sessions:[/bold]")
+    console.print(" 0. [bold green][Check ALL][/bold green]")
     for idx, name in enumerate(sessions, 1):
         console.print(f" {idx}. [yellow]{name}[/yellow]")
-    console.print(f" {len(sessions) + 1}. [bold green][Check ALL][/bold green]")
 
-    choice = console.input(f"\n[bold yellow]👉 Select a session to verify (1-{len(sessions) + 1}): [/bold yellow]").strip()
-    
+    choice = console.input(f"\n[bold yellow]👉 Select a session to verify (0-{len(sessions)}) or 'q' to quit: [/bold yellow]").strip().lower()
+
+    if choice == 'q':
+        return
+
     table = ui_utils.create_table("Session Verification Results", ["Session Name", "Status", "Details"])
     table.columns[0].style = "cyan"
     table.columns[1].justify = "center"
     table.columns[2].style = "dim"
 
-    if choice == str(len(sessions) + 1):
+    if choice == "0":
         with ui_utils.get_progress() as progress:
             task = progress.add_task("Verifying all sessions...", total=len(sessions))
             for name in sessions:
