@@ -8,7 +8,7 @@
     </div>
 
     <div class="filter-form">
-        <form method="GET" action="/setup">
+        <form method="GET" action="/ghost/setup">
             <input type="text" name="q" placeholder="Filter by Title..." value="{{ query }}">
             <button type="submit">Filter</button>
         </form>
@@ -82,7 +82,7 @@ async function saveMapping(chatId) {
     statusCell.innerHTML = '<span class="badge badge-info">Saving...</span>';
     
     try {
-        const response = await fetch('/api/chat_mapping', {
+        const response = await fetch('/ghost/api/chat_mapping', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

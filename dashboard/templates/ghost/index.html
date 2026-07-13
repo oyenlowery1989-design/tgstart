@@ -75,7 +75,7 @@
         </tbody>
     </table>
     <div class="pagination">
-        <a href="/events">View All Events</a>
+        <a href="/ghost/events">View All Events</a>
     </div>
 </div>
 
@@ -84,7 +84,7 @@
 
     async function pollEvents() {
         try {
-            const url = lastTs ? `/api/recent_events_v2?after_ts=${encodeURIComponent(lastTs)}` : `/api/recent_events_v2`;
+            const url = lastTs ? `/ghost/api/recent_events_v2?after_ts=${encodeURIComponent(lastTs)}` : `/ghost/api/recent_events_v2`;
             const response = await fetch(url);
             if (!response.ok) return;
 
