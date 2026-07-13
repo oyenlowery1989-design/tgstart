@@ -1,0 +1,58 @@
+{% extends "ghost/base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1>User Directory</h1>
+        <small class="badge badge-info">Total Users: {{ total_users }}</small>
+    </div>
+    
+    <div class="filter-form">
+        <form method="GET" action="/users">
+            <input type="text" name="q" placeholder="Search username, ID or name..." value="{{ query }}">
+            <button type="submit">Search</button>
+        </form>
+    </div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>User ID</th>
+                <th>Username</th>
+                <th>First Name</th>
+                <th>Last Name</th>
+                <th>Last Seen</th>
+                <th>Bot?</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for u in users %}
+            <tr>
+                <td>{{ u.user_id }}</td>
+                <td>{% if u.username %}@{{ u.username }}{% else %}—{% endif %}</td>
+                <td>{{ u.first_name }}</td>
+                <td>{{ u.last_name }}</td>
+                <td>{{ u.last_seen }}</td>
+                <td>
+                    {% if u.is_bot %}
+                    <span class="badge badge-warning">BOT</span>
+                    {% else %}
+                    <span class="badge badge-success">USER</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    
+    <div class="pagination">
+        {% if page > 1 %}
+        <a href="?page={{ page - 1 }}&q={{ query }}">&laquo; Prev</a>
+        {% endif %}
+        <span>Page {{ page }} of {{ total_pages }}</span>
+        {% if page < total_pages %}
+        <a href="?page={{ page + 1 }}&q={{ query }}">Next &raquo;</a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

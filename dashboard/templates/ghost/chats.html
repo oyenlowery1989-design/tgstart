@@ -1,0 +1,137 @@
+{% extends "ghost/base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1>Chats Management</h1>
+        <small class="badge badge-info">Total: {{ total_chats }}</small>
+    </div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Monitor</th>
+                <th>Title (Type)</th>
+                <th>Backup Chat</th>
+                <th>Members</th>
+                <th>Log New</th>
+                <th>Mirror New</th>
+                <th>Log Edits</th>
+                <th>Log Deletes</th>
+                <th>Log Joins</th>
+                <th>Adv</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for chat in chats %}
+            <tr>
+                <td>
+                    <label class="toggle-switch">
+                        <input type="checkbox" onclick="toggleMonitor('{{ chat.chat_id }}', this.checked); return true;" {% if chat.monitored %}checked{% endif %}>
+                        <span class="slider"></span>
+                    </label>
+                </td>
+                <td>
+                    {{ chat.title }} <br>
+                    <small style="color:#6c757d;">{{ chat.type }} | ID: {{ chat.chat_id }}</small>
+                </td>
+                <td>{{ chat.backup_chat_id }}</td>
+                <td>{{ chat.member_count }}</td>
+                <td>
+                    <label class="toggle-switch">
+                        <input type="checkbox" onclick="toggleConfig('{{ chat.chat_id }}', 'toggle_log_new', this.checked); return true;" {% if chat.toggle_log_new %}checked{% endif %}>
+                        <span class="slider"></span>
+                    </label>
+                </td>
+                <td>
+                    <label class="toggle-switch">
+                        <input type="checkbox" onclick="toggleConfig('{{ chat.chat_id }}', 'toggle_mirror_new', this.checked); return true;" {% if chat.toggle_mirror_new %}checked{% endif %}>
+                        <span class="slider"></span>
+                    </label>
+                </td>
+                <td>
+                    <label class="toggle-switch">
+                        <input type="checkbox" onclick="toggleConfig('{{ chat.chat_id }}', 'toggle_edits', this.checked); return true;" {% if chat.toggle_edits %}checked{% endif %}>
+                        <span class="slider"></span>
+                    </label>
+                </td>
+                <td>
+                    <label class="toggle-switch">
+                        <input type="checkbox" onclick="toggleConfig('{{ chat.chat_id }}', 'toggle_deletes', this.checked); return true;" {% if chat.toggle_deletes %}checked{% endif %}>
+                        <span class="slider"></span>
+                    </label>
+                </td>
+                <td>
+                    <label class="toggle-switch">
+                        <input type="checkbox" onclick="toggleConfig('{{ chat.chat_id }}', 'toggle_joins', this.checked); return true;" {% if chat.toggle_joins %}checked{% endif %}>
+                        <span class="slider"></span>
+                    </label>
+                </td>
+                <td>
+                    <button onclick="document.getElementById('adv-{{ chat.chat_id }}').style.display = document.getElementById('adv-{{ chat.chat_id }}').style.display === 'none' ? 'table-row' : 'none';">⚙️</button>
+                </td>
+            </tr>
+            <tr id="adv-{{ chat.chat_id }}" style="display:none; background-color: #f8f9fa;">
+                <td colspan="10" style="padding: 10px 20px;">
+                    <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
+                        <strong>Advanced:</strong>
+                        <div>
+                            Admin: 
+                            <label class="toggle-switch">
+                                <input type="checkbox" onclick="toggleConfig('{{ chat.chat_id }}', 'toggle_admin', this.checked); return true;" {% if chat.toggle_admin %}checked{% endif %}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div>
+                            Restrict: 
+                            <label class="toggle-switch">
+                                <input type="checkbox" onclick="toggleConfig('{{ chat.chat_id }}', 'toggle_restrict', this.checked); return true;" {% if chat.toggle_restrict %}checked{% endif %}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div>
+                            Invites: 
+                            <label class="toggle-switch">
+                                <input type="checkbox" onclick="toggleConfig('{{ chat.chat_id }}', 'toggle_invites', this.checked); return true;" {% if chat.toggle_invites %}checked{% endif %}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div>
+                            Bots: 
+                            <label class="toggle-switch">
+                                <input type="checkbox" onclick="toggleConfig('{{ chat.chat_id }}', 'toggle_bots', this.checked); return true;" {% if chat.toggle_bots %}checked{% endif %}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div>
+                            Bio:
+                            <label class="toggle-switch">
+                                <input type="checkbox" onclick="toggleConfig('{{ chat.chat_id }}', 'toggle_bio_worker', this.checked); return true;" {% if chat.toggle_bio_worker %}checked{% endif %}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div>
+                            Reactions:
+                            <label class="toggle-switch">
+                                <input type="checkbox" onclick="toggleConfig('{{ chat.chat_id }}', 'toggle_reactions', this.checked); return true;" {% if chat.toggle_reactions %}checked{% endif %}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    
+    <div class="pagination">
+        {% if page > 1 %}
+        <a href="?page={{ page - 1 }}">&laquo; Prev</a>
+        {% endif %}
+        <span>Page {{ page }} of {{ total_pages }}</span>
+        {% if page < total_pages %}
+        <a href="?page={{ page + 1 }}">Next &raquo;</a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

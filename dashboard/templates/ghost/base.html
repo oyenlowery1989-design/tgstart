@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}GhostMirror Dashboard{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="warning-banner">
+      ⚠️ CAUTION: Local only! Do NOT expose this dashboard to the public
+      internet.
+    </div>
+
+    <div class="navbar">
+      <a href="/sessions">← Suite Dashboard</a>
+      <a href="/ghost">Ghost Mirror Home</a>
+      <a href="/ghost/chats">Chats</a>
+      <a href="/ghost/setup">Setup</a>
+      <a href="/ghost/events">Events</a>
+      <a href="/ghost/users">Users</a>
+    </div>
+
+    <div class="container">{% block content %}{% endblock %}</div>
+
+    <script>
+      async function fetchPost(url) {
+        try {
+          const response = await fetch(url, { method: "POST" });
+          if (!response.ok) {
+            alert("Action failed: " + response.statusText);
+            return false;
+          }
+          return true;
+        } catch (err) {
+          alert("Network error: " + err);
+          return false;
+        }
+      }
+
+      async function toggleConfig(chatId, key, isChecked) {
+        const success = await fetchPost(
+          `/ghost/api/toggle/${chatId}/${key}?value=${isChecked ? 1 : 0}`,
+        );
+        if (!success) window.location.reload();
+      }
+
+      async function toggleMonitor(chatId, isChecked) {
+        const success = await fetchPost(
+          `/ghost/api/chats/${chatId}/monitor?value=${isChecked ? 1 : 0}`,
+        );
+        if (!success) window.location.reload();
+      }
+    </script>
+  </body>
+</html>

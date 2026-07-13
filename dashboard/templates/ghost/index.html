@@ -1,0 +1,146 @@
+{% extends "ghost/base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1>Dashboard Overview</h1>
+        <small class="badge badge-info" style="float: right;">v{{ schema_version }} | Bump: {{ config_bump }}</small>
+    </div>
+    <div class="stat-grid">
+        <div class="stat-box">
+            <div class="stat-value">{{ monitored_count }}</div>
+            <div class="stat-label">Monitored Chats</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-value">{{ message_count }}</div>
+            <div class="stat-label">Messages Logged</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-value">{{ event_count }}</div>
+            <div class="stat-label">Total Events</div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Recent Critical Issues</div>
+    {% if failures %}
+    <table>
+        <thead>
+            <tr>
+                <th>Time (UTC)</th>
+                <th>Chat ID</th>
+                <th>Error</th>
+                <th>Type</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for f in failures %}
+            <tr>
+                <td>{{ f.ts }}</td>
+                <td>{{ f.chat_id }}</td>
+                <td><span class="badge badge-danger">{{ f.summary_json|string|truncate(50) }}</span></td>
+                <td>{{ f.event_type }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; color: green;">No recent critical failures.</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <div class="card-header">Latest Events</div>
+    <table id="events-table">
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>Chat</th>
+                <th>Type</th>
+                <th>User</th>
+                <th>Summary</th>
+            </tr>
+        </thead>
+        <tbody id="events-table-body">
+            {% for e in recent_events %}
+            <tr>
+                <td>{{ e.ts }}</td>
+                <td>{{ e.chat_id }}</td>
+                <td><span class="badge badge-info">{{ e.event_type }}</span></td>
+                <td>{{ e.actor_user_id }}</td>
+                <td>{{ e.summary_json|string|truncate(80) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="pagination">
+        <a href="/events">View All Events</a>
+    </div>
+</div>
+
+<script>
+    let lastTs = "{{ recent_events[0].ts if recent_events else '' }}";
+
+    async function pollEvents() {
+        try {
+            const url = lastTs ? `/api/recent_events_v2?after_ts=${encodeURIComponent(lastTs)}` : `/api/recent_events_v2`;
+            const response = await fetch(url);
+            if (!response.ok) return;
+
+            const data = await response.json();
+            if (data.events && data.events.length > 0) {
+                const tbody = document.getElementById("events-table-body");
+                
+                // API returns ASC (Old -> New). Newest is last.
+                const newest = data.events[data.events.length - 1];
+                if (newest.ts > lastTs) {
+                     lastTs = newest.ts;
+                }
+
+                // Prepend new rows. 
+                // Iterate ASC (Old->New): Prepend Old, then Prepend New. New ends up at top.
+                data.events.forEach(e => {
+                    const row = document.createElement("tr");
+                    row.style.backgroundColor = "#ffffe0"; // Highlight new
+                    row.style.transition = "background-color 2s ease";
+                    
+                    const summary = (typeof e.summary_json === 'string' ? e.summary_json : JSON.stringify(e.summary_json)).substring(0, 80) + "...";
+
+                    const cellValues = [e.ts, e.chat_id, null, e.actor_user_id || 'None', summary];
+                    cellValues.forEach((val, i) => {
+                        const td = document.createElement("td");
+                        if (i === 2) {
+                            const badge = document.createElement("span");
+                            badge.className = "badge badge-info";
+                            badge.textContent = e.event_type;
+                            td.appendChild(badge);
+                        } else {
+                            td.textContent = val;
+                        }
+                        row.appendChild(td);
+                    });
+                    if (tbody.firstChild) {
+                        tbody.insertBefore(row, tbody.firstChild);
+                    } else {
+                        tbody.appendChild(row);
+                    }
+                    
+                    // Fade out highlight
+                    setTimeout(() => { row.style.backgroundColor = "transparent"; }, 2000);
+                });
+                
+                // Limit table size
+                while (tbody.children.length > 200) {
+                    tbody.removeChild(tbody.lastChild);
+                }
+            }
+        } catch (e) {
+            console.error("Poll error", e);
+        }
+    }
+
+    // Poll every 3 seconds
+    setInterval(pollEvents, 3000);
+</script>
+{% endblock %}
