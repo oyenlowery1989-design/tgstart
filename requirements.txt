@@ -19,3 +19,12 @@ qrcode_terminal>=0.8
 
 # Optional: For advanced features
 # cryptg  # For faster encryption (optional but recommended)
+
+# Web dashboard (merged from 6_messaging/65/requirements.txt)
+fastapi>=0.110.0
+uvicorn>=0.29.0
+jinja2>=3.1.0
+aiofiles>=23.0.0
+loguru>=0.7.0
+websockets>=12.0
+python-multipart>=0.0.9

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Telegram Suite Dashboard{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="warning-banner">
+      ⚠️ CAUTION: Local only! Do NOT expose this dashboard to the public internet.
+    </div>
+
+    <div class="navbar">
+      <a href="/sessions">Sessions</a>
+      <a href="/chats">Chats</a>
+      <a href="/scrape">Scraping</a>
+      <a href="/stats">Stats</a>
+      <a href="/ghost">Ghost Mirror</a>
+      <a href="/utilities/participation">Utilities</a>
+    </div>
+
+    <form class="session-switcher" method="post" action="/sessions/active">
+      <label>Active session:
+        <select name="session_name" onchange="this.form.submit()">
+          {% for s in all_sessions %}
+          <option value="{{ s }}" {% if s == active_session %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </form>
+
+    <div class="container">{% block content %}{% endblock %}</div>
+
+    <script>
+      function openProgressSocket(path, onMessage) {
+        const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const ws = new WebSocket(`${proto}//${window.location.host}${path}`);
+        ws.onmessage = (evt) => onMessage(JSON.parse(evt.data));
+        ws.onerror = () => onMessage({ error: "WebSocket connection error." });
+        return ws;
+      }
+    </script>
+    {% block scripts %}{% endblock %}
+  </body>
+</html>
