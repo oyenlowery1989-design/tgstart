@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Sessions{% endblock %}
+{% block content %}
+<h1>Sessions</h1>
+<table>
+  <thead><tr><th>Name</th><th>Status</th><th>Details</th></tr></thead>
+  <tbody>
+    {% for r in results %}
+    <tr>
+      <td>{{ r.name }}</td>
+      <td>{{ r.status }}</td>
+      <td>{{ r.details }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p><a href="/sessions/login">+ Add account (phone)</a> | <a href="/sessions/login/qr">+ Add account (QR)</a></p>
+{% endblock %}
