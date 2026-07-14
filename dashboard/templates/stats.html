@@ -24,7 +24,15 @@
         tbody.innerHTML = "";
         data.top_users.forEach((u) => {
           const tr = document.createElement("tr");
-          tr.innerHTML = `<td>${u[0]}</td><td>${u[1]}</td><td>${u[2].toFixed(1)}%</td>`;
+          const tdName = document.createElement("td");
+          tdName.textContent = u[0];
+          const tdCount = document.createElement("td");
+          tdCount.textContent = u[1];
+          const tdPct = document.createElement("td");
+          tdPct.textContent = u[2].toFixed(1) + "%";
+          tr.appendChild(tdName);
+          tr.appendChild(tdCount);
+          tr.appendChild(tdPct);
           tbody.appendChild(tr);
         });
       }
