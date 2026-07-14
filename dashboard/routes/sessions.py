@@ -1,10 +1,8 @@
 """Sessions tab: listing/verification + active-session switcher. Login endpoints added in Tasks 4-5."""
 from fastapi import APIRouter, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pathlib import Path
-
-from fastapi.responses import JSONResponse
 
 from dashboard.state import list_sessions, get_active_session, ACTIVE_SESSION_COOKIE
 from dashboard.services.sessions_service import check_all_sessions, start_phone_login, submit_code, submit_2fa

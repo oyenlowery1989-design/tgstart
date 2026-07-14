@@ -1,9 +1,14 @@
 """Session listing/verification, extracted from 2_verify/2_verify_login_advanced.py."""
+import os
+import time
+import uuid
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Awaitable, Callable, Dict, List, Optional
 
-from telethon import TelegramClient
+from telethon import TelegramClient, errors
 
-from dashboard.state import list_sessions, session_path
+from dashboard.state import list_sessions, session_path, SESSIONS_DIR
 from dashboard.tg_client import API_ID, API_HASH
 
 ProgressCB = Callable[[int, int, str], Awaitable[None]]
@@ -44,14 +49,6 @@ async def check_all_sessions(progress_cb: Optional[ProgressCB] = None) -> List[D
 
 
 # --- Phone login flow ---
-import os
-import time
-import uuid
-from dataclasses import dataclass
-
-from telethon import errors
-
-from dashboard.state import SESSIONS_DIR
 
 
 @dataclass
@@ -69,6 +66,13 @@ _FLOWS: Dict[str, LoginFlow] = {}
 def _temp_session_path() -> str:
     SESSIONS_DIR.mkdir(exist_ok=True)
     return str(SESSIONS_DIR / f"temp_login_{int(time.time())}_{uuid.uuid4().hex[:6]}")
+
+
+def _cleanup_temp_session(temp_name: str) -> None:
+    """Removes a temp .session file left behind by a failed login attempt."""
+    session_file = Path(f"{temp_name}.session")
+    if session_file.exists():
+        session_file.unlink()
 
 
 async def _finalize_session(client: TelegramClient, temp_session_name: str) -> str:
@@ -92,9 +96,11 @@ async def start_phone_login(phone: str) -> Dict[str, str]:
         sent = await client.send_code_request(phone)
     except errors.FloodWaitError as e:
         await client.disconnect()
+        _cleanup_temp_session(temp_name)
         return {"status": "error", "error": f"Too many attempts. Wait {e.seconds}s."}
     except Exception as e:
         await client.disconnect()
+        _cleanup_temp_session(temp_name)
         return {"status": "error", "error": str(e)}
     flow_id = uuid.uuid4().hex
     _FLOWS[flow_id] = LoginFlow(id=flow_id, client=client, phone=phone, phone_code_hash=sent.phone_code_hash, temp_session_name=temp_name)
