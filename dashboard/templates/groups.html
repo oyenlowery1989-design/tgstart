@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Group Users{% endblock %}
+{% block content %}
+<h1>Group Users: {{ group_id }}</h1>
+<div class="progress-bar-outer"><div id="bar" class="progress-bar-inner" style="width:0%"></div></div>
+<p id="status">Connecting...</p>
+<script>
+  openProgressSocket("/groups/{{ group_id }}/users/ws", (data) => {
+    if (data.error) {
+      document.getElementById("status").textContent = "Error: " + data.error;
+      return;
+    }
+    document.getElementById("status").textContent = data.message;
+    if (data.total) {
+      document.getElementById("bar").style.width = Math.round((data.current / data.total) * 100) + "%";
+    }
+  });
+</script>
+{% endblock %}
