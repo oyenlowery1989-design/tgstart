@@ -8,19 +8,33 @@ A Telethon-based Telegram automation suite: a numbered pipeline of standalone CL
 
 ## Commands
 
-Root-level scripts share one venv and `requirements.txt`:
+Root-level scripts and the web dashboard share one venv and `requirements.txt`
+(this now includes fastapi/uvicorn/jinja2/aiofiles/loguru, merged from the old
+`6_messaging/65/requirements.txt`):
 
 ```bash
 python -m venv venv
 venv/bin/pip install -r requirements.txt   # or venv\Scripts\pip on Windows
-python run.py                              # interactive menu, choice 0 to exit
+python dashboard/app.py                    # primary: web dashboard at http://127.0.0.1:8000
+python run.py                              # fallback: terminal menu, choice 0 to exit
 ```
 
-`6_messaging/65/` has its **own** `requirements.txt` and is meant to run in its own venv (installed separately, not from the root `requirements.txt`). Root `run.py` choice 8 launches it as a subprocess pair:
+`dashboard/app.py` is the primary, documented way to run the suite: it covers login,
+session verification, chats, group users, scraping, stats, Ghost Mirror, and
+utilities (participation/purge) behind one HTTP Basic auth gate
+(`DASHBOARD_USER`/`DASHBOARD_PASSWORD`), and manages the Ghost Mirror bot
+(`6_messaging/65/ghost_runner.py`) as a supervised subprocess internally.
 
-- Choice 8 → starts `6_messaging/65/run.py` (bot) in the background, then `6_messaging/65/dashboard.py` (FastAPI UI, `http://127.0.0.1:8000`) in the foreground
+`run.py`'s terminal menu remains as a minimal fallback for pure-terminal use; its
+choice 8 now launches `dashboard/app.py` directly instead of the old `65`-only
+dashboard pair.
 
-There is no test suite, linter config, or CI in this repo — don't assume `pytest`/`ruff`/etc. exist. `python -m py_compile <file>` is the only verification available for a quick syntax check.
+`6_messaging/65/` no longer has its own venv — its dependencies were merged into the
+root `requirements.txt` and its `venv/` directory has been retired.
+
+There is no test suite, linter config, or CI in this repo — don't assume
+`pytest`/`ruff`/etc. exist. `python -m py_compile <file>` is the only verification
+available for a quick syntax check.
 
 ## Architecture
 
@@ -50,6 +64,12 @@ Privacy/safety-sensitive behavior is opt-in via env flags, off by default: `EXPO
 `65`'s dashboard is gated by HTTP Basic auth (`DASHBOARD_USER`/`DASHBOARD_PASSWORD`); if unset, it only binds loopback — it refuses to start bound to a non-loopback host without a password set (fail-closed by design, see the startup check in `dashboard.py`).
 
 `65/ghost_runner.py`'s `messages` table tracks `dest_message_id` (where a source message landed in the backup chat) — this is what lets reactions and replies thread onto the correct mirrored message. When editing `_cache_message`, always update via `ON CONFLICT DO UPDATE` on specific columns, never `INSERT OR REPLACE`, or an edit will silently wipe the recorded `dest_message_id`.
+
+`65/`'s FastAPI dashboard routes have been ported into the root `dashboard/` app under
+`/ghost/*` (see `dashboard/routes/ghost_mirror.py`), reading the same `65/data/ghost.db`
+unchanged. `65/dashboard.py` itself is no longer launched directly — `dashboard/app.py`
+launches `65/run.py` (the bot watchdog) as a subprocess and serves the ported routes
+in-process.
 
 ### Adding a new script
 

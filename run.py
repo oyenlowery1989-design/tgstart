@@ -32,21 +32,17 @@ def run_script(script_path, args=None, cwd=None):
     console.print("\n[dim][Press Enter to return to menu][/dim]")
     input()
 
-def run_dashboard_pair(cwd):
-    """Starts the mirror bot (run.py watchdog) in the background, then the dashboard UI in the foreground.
+def run_dashboard(cwd=None):
+    """Starts the new consolidated web dashboard (dashboard/app.py) from repo root.
 
-    GhostMirror v4.0 (65/) needs both processes per its own README: the bot connects
-    to Telegram and mirrors messages, the dashboard is just the config/monitoring UI.
+    This supersedes the old 65-only dashboard pair: dashboard/app.py's own lifespan
+    hook now starts/stops the Ghost Mirror bot subprocess internally (see
+    dashboard/ghost_process.py), so only one process needs to be launched here.
     """
-    bot_proc = subprocess.Popen([sys.executable, "run.py"], cwd=cwd)
     try:
-        console.print("[dim]Mirror bot started in background. Launching dashboard...[/dim]")
-        subprocess.run([sys.executable, "dashboard.py"], cwd=cwd)
+        subprocess.run([sys.executable, os.path.join("dashboard", "app.py")])
     except Exception as e:
         console.print(f"\n[bold red]❌ Failed to run dashboard: {e}[/bold red]")
-    finally:
-        bot_proc.terminate()
-        bot_proc.wait()
 
     console.print("\n[dim][Press Enter to return to menu][/dim]")
     input()
@@ -74,7 +70,7 @@ def main():
         table.add_row("4", "👥", "List Users in a Group [dim]- scrape a group's member list[/dim]")
         table.add_row("5", "🔗", "Extract Links from Group [dim]- scan message history for URLs[/dim]")
         table.add_row("6", "📊", "Group Analytics & Stats [dim]- message/activity counts for a group[/dim]")
-        table.add_row("8", "🛰️", "Ghost Mirror - Dashboard (v4.0) [dim]- mirror bot + config UI at localhost:8000[/dim]")
+        table.add_row("8", "🛰️", "Web Dashboard [dim]- full suite UI (login, chats, scraping, stats, ghost mirror, utilities) at localhost:8000[/dim]")
         table.add_row("11", "🔍", "Find Chats with My Messages [dim]- audit which chats you've posted in[/dim]")
         table.add_row("12", "🧹", "Self-Destruct (Purge My Messages) [dim]- delete your own messages in a chosen chat[/dim]")
         table.add_row("", "", "")
@@ -97,7 +93,7 @@ def main():
         elif choice == "6":
             run_script("5_monitoring/50_group_stats.py")
         elif choice == "8":
-            run_dashboard_pair(cwd="6_messaging/65")
+            run_dashboard()
         elif choice == "11":
             run_script("7_utilities/71_find_my_participation.py")
         elif choice == "12":
