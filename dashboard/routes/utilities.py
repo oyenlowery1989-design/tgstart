@@ -56,7 +56,8 @@ async def participation_ws(websocket: WebSocket):
         await websocket.close()
 
 
-# --- Purge routes (destructive: see purge_service.purge_my_messages type-to-confirm guard) ---
+# --- Purge routes (destructive: see purge_service.purge_my_messages type-to-confirm guard,
+#     which checks confirm_name against a server-resolved chat name, not client input) ---
 from dashboard.services.purge_service import scan_my_activity, preview_my_messages, purge_my_messages
 
 
@@ -115,13 +116,16 @@ async def purge_ws(websocket: WebSocket):
     try:
         params = await websocket.receive_json()
         group_id = int(params["group_id"])
-        target_name = params["target_name"]
+        # NOTE: params.get("target_name") is client-supplied and used for display only
+        # (e.g. echoing back what the UI showed) - it must never be used for the
+        # type-to-confirm safety check. purge_my_messages resolves the real chat name
+        # itself via client.get_entity(group_id) and checks confirm_name against that.
         confirm_name = params["confirm_name"]
 
         async def progress_cb(current: int, total: int, message: str):
             await websocket.send_json({"current": current, "total": total, "message": message})
 
-        result = await purge_my_messages(session_name, group_id, target_name, confirm_name, progress_cb=progress_cb)
+        result = await purge_my_messages(session_name, group_id, confirm_name, progress_cb=progress_cb)
         await websocket.send_json({
             "current": result["deleted_count"], "total": result["deleted_count"],
             "message": f"Deleted {result['deleted_count']} messages.", "done": True,

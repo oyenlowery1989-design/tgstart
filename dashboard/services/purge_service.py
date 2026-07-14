@@ -52,17 +52,25 @@ async def preview_my_messages(session_name: str, group_id: int, limit: int = 10)
     return rows
 
 
-async def purge_my_messages(session_name: str, group_id: int, target_name: str, confirm_name: str,
+async def purge_my_messages(session_name: str, group_id: int, confirm_name: str,
                              progress_cb: Optional[ProgressCB] = None) -> Dict:
-    # Safety-critical: this check MUST happen before any Telethon client is created or
-    # connected, so a mismatched confirmation can never touch the network or a message.
-    if confirm_name.strip() != target_name.strip():
-        raise ValueError("Confirmation text does not match the target chat name. Purge aborted.")
-
+    """Delete all of the account's own messages in `group_id`, gated by a type-to-confirm
+    check. `confirm_name` is client-supplied user input, but it is compared against the
+    chat's real title/first_name resolved server-side via `client.get_entity(group_id)` —
+    never against a client-supplied name — so a compromised/buggy frontend cannot make the
+    check trivially pass by sending matching-but-arbitrary strings.
+    """
     client = make_client(session_name)
     await client.start()
     deleted_count = 0
     try:
+        # Safety-critical: resolve the real chat name ourselves and compare BEFORE any
+        # deletion. This must happen before the delete loop below runs.
+        entity = await client.get_entity(group_id)
+        target_name = getattr(entity, "title", None) or getattr(entity, "first_name", None) or str(group_id)
+        if confirm_name.strip() != target_name.strip():
+            raise ValueError("Confirmation text does not match the target chat name. Purge aborted.")
+
         while True:
             ids_to_delete = [msg.id async for msg in client.iter_messages(group_id, from_user="me", limit=100)]
             if not ids_to_delete:
@@ -85,5 +93,6 @@ if __name__ == "__main__":
     assert inspect.iscoroutinefunction(preview_my_messages)
     assert inspect.iscoroutinefunction(purge_my_messages)
     sig = inspect.signature(purge_my_messages)
-    assert "confirm_name" in sig.parameters and "target_name" in sig.parameters
+    assert "confirm_name" in sig.parameters
+    assert "target_name" not in sig.parameters, "target_name must not be client-suppliable"
     print("purge_service.py smoke check OK")
