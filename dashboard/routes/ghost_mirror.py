@@ -209,8 +209,10 @@ async def api_chat_mapping(payload: dict):
     chat_id = payload.get("chat_id")
     monitored = 1 if payload.get("monitored") else 0
     backup_id = payload.get("backup_chat_id")
-    if not chat_id:
-        raise HTTPException(400, "Missing chat_id")
+    if not isinstance(chat_id, int):
+        raise HTTPException(400, "chat_id must be an integer")
+    if backup_id is not None and not isinstance(backup_id, int):
+        raise HTTPException(400, "backup_chat_id must be an integer or null")
     execute_query("UPDATE chats SET monitored = ?, backup_chat_id = ? WHERE chat_id = ?", (monitored, backup_id, chat_id), commit=True)
     execute_query("INSERT OR IGNORE INTO config (chat_id) VALUES (?)", (chat_id,), commit=True)
     bump_config()

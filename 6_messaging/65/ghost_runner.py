@@ -56,7 +56,7 @@ logger.add(ERROR_DIR / "{time:YYYY-MM-DD}.log", level="ERROR", rotation="00:00")
 
 # --- Database Manager (SQLite) ---
 class DatabaseManager:
-    SCHEMA_VERSION = 4  # Phase 4: reaction mirroring + dest-message tracking
+    SCHEMA_VERSION = 5  # Phase 5: indices for dashboard query paths
     
     def __init__(self, db_path: Path):
         self.db_path = db_path
@@ -114,13 +114,23 @@ class DatabaseManager:
         except sqlite3.OperationalError:
             pass
 
+    def _apply_schema_v5(self, cur):
+        # Dashboard queries filter/sort events by ts, event_type, chat_id; users by
+        # username/first_name; messages by dest_message_id — all were full table scans.
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_events_type_ts ON events(event_type, ts)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_events_chat_id ON events(chat_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_users_first_name ON users(first_name)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_dest_message_id ON messages(dest_message_id)")
+
     def _migrate(self):
         cur = self.conn.cursor()
-        
+
         try:
             cur.execute("PRAGMA user_version")
             current_ver = cur.fetchone()[0]
-        except:
+        except sqlite3.Error:
             current_ver = 0
             
         logger.info(f"Database version: {current_ver}. Target: {self.SCHEMA_VERSION}")
@@ -143,6 +153,11 @@ class DatabaseManager:
         if current_ver < 4:
             logger.info("Applying Migration v4 (Reactions & Dest Message Tracking)")
             self._apply_schema_v4(cur)
+            current_ver = 4
+
+        if current_ver < 5:
+            logger.info("Applying Migration v5 (Indices)")
+            self._apply_schema_v5(cur)
             cur.execute(f"PRAGMA user_version = {self.SCHEMA_VERSION}")
             self.conn.commit()
             

@@ -11,7 +11,9 @@ Run:
 
 import asyncio
 import csv
+import os
 import re
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, Iterable, Optional
@@ -19,6 +21,9 @@ from typing import Dict, Iterable, Optional
 from telethon import TelegramClient
 from telethon.errors.rpcerrorlist import SessionPasswordNeededError
 from telethon.tl.types import Message
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.ui_utils import console, print_header, print_success
 
 
 # ============================================================
@@ -145,7 +150,7 @@ async def scan_links(client, entity) -> Dict[str, LinkRecord]:
         scanned += 1
 
         if PRINT_PROGRESS and scanned % PROGRESS_EVERY == 0:
-            print(f"Scanned {scanned:,} messages | Links: {len(seen):,}")
+            console.print(f"Scanned {scanned:,} messages | Links: {len(seen):,}")
 
         if not isinstance(msg, Message) or not msg.message:
             continue
@@ -181,11 +186,12 @@ def write_outputs(records):
 
 
 async def main():
+    print_header("Scrape Links")
     client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
     await ensure_login(client)
 
     entity = await resolve_entity(client)
-    print("Scanning:", getattr(entity, "title", None) or TARGET)
+    console.print(f"Scanning: {getattr(entity, 'title', None) or TARGET}")
 
     seen = await scan_links(client, entity)
 
@@ -197,11 +203,14 @@ async def main():
 
     write_outputs(records)
 
-    print(f"\nDone. Saved {len(records):,} unique links.")
-    print(f"- {OUT_CSV}")
+    print_success(f"Saved {len(records):,} unique links to {OUT_CSV}")
 
     await client.disconnect()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, EOFError):
+        console.print("\n⛔ Process cancelled by user. Exiting safely...")
+        sys.exit(0)

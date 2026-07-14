@@ -14,6 +14,9 @@ import qrcode_terminal
 
 from dotenv import load_dotenv
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.ui_utils import console, print_header, print_error, print_success
+
 # Load environment variables
 load_dotenv()
 
@@ -27,8 +30,9 @@ TEMP_SESSION_NAME = os.path.join(ROOT_DIR, "sessions", f"temp_login_{int(time.ti
 # --------------
 
 async def main():
-    print(f"🔄 Starting login process as: {TEMP_SESSION_NAME}...")
-    
+    print_header("QR Code Login")
+    console.print(f"[dim]Starting login process as: {TEMP_SESSION_NAME}...[/dim]")
+
     if not os.path.exists(os.path.join(ROOT_DIR, "sessions")):
         os.makedirs(os.path.join(ROOT_DIR, "sessions"))
 
@@ -36,8 +40,8 @@ async def main():
     await client.connect()
 
     qr = await client.qr_login()
-    print("\nScan this QR Code with your Telegram App:")
-    print("Settings → Devices → Link Desktop Device\n")
+    console.print("\nScan this QR Code with your Telegram App:")
+    console.print("Settings → Devices → Link Desktop Device\n")
     qrcode_terminal.draw(qr.url)
 
     # Wait for scan
@@ -47,7 +51,7 @@ async def main():
         # Check if it's a 2FA error (SessionPasswordNeededError)
         # Using string check to avoid importing the specific error class if lazy
         if "PasswordNeeded" in str(e) or "password is required" in str(e):
-            print("\n🔐 Two-Step Verification is enabled.")
+            console.print("\n🔐 Two-Step Verification is enabled.")
             # We need to sign in with the password
             pw = input("Please enter your 2FA password: ").strip()
             await client.sign_in(password=pw)
@@ -57,7 +61,7 @@ async def main():
     # Get user info
     me = await client.get_me()
     username = me.username or f"user_{me.id}"
-    print(f"\n✅ Successfully logged in as: @{username} (ID: {me.id})")
+    print_success(f"Successfully logged in as: @{username} (ID: {me.id})")
 
     # Important: Disconnect to save the file and release the lock
     await client.disconnect()
@@ -73,22 +77,22 @@ async def main():
     final_filename = target_filename
     counter = 2
     while os.path.exists(final_filename):
-        print(f"\n⚠️  '{final_filename}' already exists.")
+        console.print(f"\n⚠️  '{final_filename}' already exists.")
         final_filename = os.path.join(ROOT_DIR, "sessions", f"{username}({counter}).session")
         counter += 1
-    
+
     try:
         os.rename(temp_filename, final_filename)
-        print(f"\n✨ Success! Session saved as: {final_filename}")
+        print_success(f"Session saved as: {final_filename}")
     except Exception as e:
-        print(f"\n❌ Error renaming file: {e}")
-        print(f"ℹ️  Your session is saved as: {temp_filename}")
+        print_error(f"Error renaming file: {e}")
+        console.print(f"ℹ️  Your session is saved as: {temp_filename}")
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, EOFError):
-        print("\n\n⛔ Process cancelled by user. Exiting safely...")
+        print_error("Process cancelled by user. Exiting safely...")
         # Cleanup temp session file if it exists
         temp_file = f"{TEMP_SESSION_NAME}.session"
         if os.path.exists(temp_file):
