@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Scraping{% endblock %}
+{% block content %}
+<h1>Extract Links</h1>
+<input id="group_id" placeholder="Group ID" />
+<input id="keyword" placeholder="Keyword filter (optional)" />
+<input id="startswith" placeholder="Starts-with filter (optional)" />
+<input id="since_date" placeholder="Since date YYYY-MM-DD (optional)" />
+<input id="message_limit" placeholder="Message limit (default 500)" />
+<label><input id="resume" type="checkbox" /> Resume from checkpoint</label>
+<button onclick="startScrape()">Start</button>
+<div class="progress-bar-outer"><div id="bar" class="progress-bar-inner" style="width:0%"></div></div>
+<p id="status"></p>
+<script>
+  function startScrape() {
+    const ws = openProgressSocket("/scrape/ws", (data) => {
+      if (data.error) {
+        document.getElementById("status").textContent = "Error: " + data.error;
+        return;
+      }
+      document.getElementById("status").textContent = data.message;
+      if (data.total) {
+        document.getElementById("bar").style.width = Math.round((data.current / data.total) * 100) + "%";
+      }
+    });
+    ws.onopen = () => {
+      ws.send(JSON.stringify({
+        group_id: document.getElementById("group_id").value,
+        keyword: document.getElementById("keyword").value,
+        startswith: document.getElementById("startswith").value,
+        since_date: document.getElementById("since_date").value,
+        message_limit: document.getElementById("message_limit").value,
+        resume: document.getElementById("resume").checked,
+      }));
+    };
+  }
+</script>
+{% endblock %}
