@@ -137,6 +137,79 @@ async def submit_2fa(flow_id: str, password: str) -> Dict[str, str]:
     return {"status": "done", "session_name": session_name}
 
 
+# --- QR login flow ---
+import base64
+import io
+
+import qrcode
+
+
+@dataclass
+class QRFlow:
+    id: str
+    client: TelegramClient
+    qr_obj: object
+    temp_session_name: str
+
+
+_QR_FLOWS: Dict[str, QRFlow] = {}
+
+
+async def start_qr_flow() -> Dict[str, str]:
+    temp_name = _temp_session_path()
+    client = TelegramClient(temp_name, API_ID, API_HASH)
+    try:
+        await client.connect()
+        qr_obj = await client.qr_login()
+        img = qrcode.make(qr_obj.url)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        png_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception:
+        await client.disconnect()
+        _cleanup_temp_session(temp_name)
+        raise
+    flow_id = uuid.uuid4().hex
+    _QR_FLOWS[flow_id] = QRFlow(id=flow_id, client=client, qr_obj=qr_obj, temp_session_name=temp_name)
+    return {"flow_id": flow_id, "qr_png_b64": png_b64}
+
+
+async def wait_qr_flow(flow_id: str) -> Dict[str, str]:
+    flow = _QR_FLOWS.get(flow_id)
+    if not flow:
+        return {"status": "error", "error": "QR flow expired or not found."}
+    try:
+        await flow.qr_obj.wait()
+    except errors.SessionPasswordNeededError:
+        return {"status": "need_2fa", "flow_id": flow_id}
+    except Exception as e:
+        if "PasswordNeeded" in str(e) or "password is required" in str(e):
+            return {"status": "need_2fa", "flow_id": flow_id}
+        del _QR_FLOWS[flow_id]
+        await flow.client.disconnect()
+        _cleanup_temp_session(flow.temp_session_name)
+        return {"status": "error", "error": str(e)}
+    session_name = await _finalize_session(flow.client, flow.temp_session_name)
+    del _QR_FLOWS[flow_id]
+    return {"status": "done", "session_name": session_name}
+
+
+async def submit_qr_2fa(flow_id: str, password: str) -> Dict[str, str]:
+    flow = _QR_FLOWS.get(flow_id)
+    if not flow:
+        return {"status": "error", "error": "QR flow expired or not found."}
+    try:
+        await flow.client.sign_in(password=password)
+    except Exception as e:
+        del _QR_FLOWS[flow_id]
+        await flow.client.disconnect()
+        _cleanup_temp_session(flow.temp_session_name)
+        return {"status": "error", "error": str(e)}
+    session_name = await _finalize_session(flow.client, flow.temp_session_name)
+    del _QR_FLOWS[flow_id]
+    return {"status": "done", "session_name": session_name}
+
+
 if __name__ == "__main__":
     import asyncio
     import inspect

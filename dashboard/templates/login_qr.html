@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Login (QR){% endblock %}
+{% block content %}
+<h1>Login via QR Code</h1>
+<img id="qr-img" style="display:none; max-width: 300px;" />
+<p id="status">Connecting...</p>
+<div id="step-2fa" style="display:none">
+  <input id="password" type="password" placeholder="2FA password" />
+  <button onclick="send2fa()">Submit password</button>
+</div>
+<script>
+  let ws = null;
+  window.addEventListener("load", () => {
+    ws = openProgressSocket("/sessions/login/qr/ws", (data) => {
+      if (data.state === "waiting") {
+        document.getElementById("qr-img").src = "data:image/png;base64," + data.qr_png_b64;
+        document.getElementById("qr-img").style.display = "block";
+        document.getElementById("status").textContent = "Scan with Telegram: Settings → Devices → Link Desktop Device";
+      } else if (data.state === "need_2fa") {
+        document.getElementById("step-2fa").style.display = "block";
+        document.getElementById("status").textContent = "Two-step verification required.";
+      } else if (data.state === "done") {
+        document.getElementById("status").textContent = "Logged in as " + data.session_name + ". Redirecting...";
+        setTimeout(() => (window.location.href = "/sessions"), 1000);
+      } else if (data.state === "error" || data.error) {
+        document.getElementById("status").textContent = "Error: " + (data.error || "unknown");
+      }
+    });
+  });
+  function send2fa() {
+    ws.send(JSON.stringify({ password: document.getElementById("password").value }));
+  }
+</script>
+{% endblock %}
