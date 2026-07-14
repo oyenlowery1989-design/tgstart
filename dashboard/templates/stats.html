@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Stats{% endblock %}
+{% block content %}
+<h1>Group Analytics</h1>
+<input id="group_id" placeholder="Group ID" />
+<input id="limit" placeholder="Message limit (default 2000)" />
+<button onclick="startStats()">Analyze</button>
+<div class="progress-bar-outer"><div id="bar" class="progress-bar-inner" style="width:0%"></div></div>
+<p id="status"></p>
+<table id="top-users"><thead><tr><th>User</th><th>Messages</th><th>%</th></tr></thead><tbody></tbody></table>
+<script>
+  function startStats() {
+    const ws = openProgressSocket("/stats/ws", (data) => {
+      if (data.error) {
+        document.getElementById("status").textContent = "Error: " + data.error;
+        return;
+      }
+      document.getElementById("status").textContent = data.message;
+      if (data.total) {
+        document.getElementById("bar").style.width = Math.round((data.current / data.total) * 100) + "%";
+      }
+      if (data.done && data.top_users) {
+        const tbody = document.querySelector("#top-users tbody");
+        tbody.innerHTML = "";
+        data.top_users.forEach((u) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td>${u[0]}</td><td>${u[1]}</td><td>${u[2].toFixed(1)}%</td>`;
+          tbody.appendChild(tr);
+        });
+      }
+    });
+    ws.onopen = () => {
+      ws.send(JSON.stringify({
+        group_id: document.getElementById("group_id").value,
+        limit: document.getElementById("limit").value,
+      }));
+    };
+  }
+</script>
+{% endblock %}
