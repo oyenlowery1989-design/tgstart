@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Chats{% endblock %}
+{% block content %}
+<h1>Chats ({{ active_session or "no active session" }})</h1>
+{% if error %}<div class="error-banner">{{ error }}</div>{% endif %}
+<table>
+  <thead><tr><th>Type</th><th>Name</th><th>ID</th><th>Username</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    <tr><td>{{ r.type }}</td><td>{{ r.name }}</td><td>{{ r.id }}</td><td>{{ r.username or "" }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p>{{ rows|length }} dialogs. Saved to <code>3_chat_management/30_data/30_dialogs.csv</code>.</p>
+{% endblock %}
