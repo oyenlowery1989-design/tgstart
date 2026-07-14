@@ -30,13 +30,14 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Telegram Suite Dashboard", dependencies=[Depends(require_auth)], lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
-from dashboard.routes import ghost_mirror, sessions, chats, groups, scrape, stats
+from dashboard.routes import ghost_mirror, sessions, chats, groups, scrape, stats, utilities
 app.include_router(ghost_mirror.router)
 app.include_router(sessions.router)
 app.include_router(chats.router)
 app.include_router(groups.router)
 app.include_router(scrape.router)
 app.include_router(stats.router)
+app.include_router(utilities.router)
 
 
 @app.get("/")

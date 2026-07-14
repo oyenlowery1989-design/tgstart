@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Find My Participation{% endblock %}
+{% block content %}
+<h1>Find My Participation</h1>
+<button onclick="startScan()">Scan</button>
+<div class="progress-bar-outer"><div id="bar" class="progress-bar-inner" style="width:0%"></div></div>
+<p id="status"></p>
+<table id="results"><thead><tr><th>Type</th><th>Name</th><th>ID</th><th>My Messages</th></tr></thead><tbody></tbody></table>
+<script>
+  function startScan() {
+    const ws = openProgressSocket("/utilities/participation/ws", (data) => {
+      if (data.error) {
+        document.getElementById("status").textContent = "Error: " + data.error;
+        return;
+      }
+      document.getElementById("status").textContent = data.message;
+      if (data.total) {
+        document.getElementById("bar").style.width = Math.round((data.current / data.total) * 100) + "%";
+      }
+      if (data.done && data.results) {
+        const tbody = document.querySelector("#results tbody");
+        tbody.innerHTML = "";
+        data.results.forEach((r) => {
+          const tr = document.createElement("tr");
+          const tdType = document.createElement("td");
+          tdType.textContent = r.type;
+          const tdName = document.createElement("td");
+          tdName.textContent = r.name;
+          const tdId = document.createElement("td");
+          tdId.textContent = r.id;
+          const tdCount = document.createElement("td");
+          tdCount.textContent = r.count;
+          tr.appendChild(tdType);
+          tr.appendChild(tdName);
+          tr.appendChild(tdId);
+          tr.appendChild(tdCount);
+          tbody.appendChild(tr);
+        });
+      }
+    });
+  }
+</script>
+{% endblock %}
