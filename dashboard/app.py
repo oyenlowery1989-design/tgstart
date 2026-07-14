@@ -9,13 +9,10 @@ sys.path.insert(0, str(ROOT_DIR))
 
 from fastapi import FastAPI, Depends
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 import uvicorn
 
 from dashboard.auth import require_auth, DASHBOARD_PASSWORD
 from dashboard.ghost_process import start_ghost_bot, stop_ghost_bot
-
-templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
 @asynccontextmanager

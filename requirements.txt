@@ -14,7 +14,7 @@ colorama>=0.4.4
 rich>=13.0.0
 
 # QR-code login
-qrcode>=7.4
+qrcode[pil]>=7.4
 qrcode_terminal>=0.8
 
 # Optional: For advanced features
