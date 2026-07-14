@@ -38,7 +38,7 @@ async def group_users_page(request: Request, group_id: int):
 @router.websocket("/{group_id}/users/ws")
 async def group_users_ws(websocket: WebSocket, group_id: int):
     await websocket.accept()
-    session_name = websocket.cookies.get("active_session")
+    session_name = get_active_session(websocket)
     if not session_name:
         await websocket.send_json({"error": "No active session set."})
         await websocket.close()
@@ -56,6 +56,8 @@ async def group_users_ws(websocket: WebSocket, group_id: int):
         )
         csv_path = save_group_users_csv(str(group_id), group_id, users, EXPORT_PHONE_NUMBERS_DEFAULT)
         await websocket.send_json({"current": len(users), "total": len(users), "message": f"Saved {csv_path}", "done": True})
+    except WebSocketDisconnect:
+        pass
     except Exception as e:
         await websocket.send_json({"error": str(e)})
     finally:
