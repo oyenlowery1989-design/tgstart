@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Purge My Messages{% endblock %}
+{% block content %}
+<h1>Self-Destruct Purge</h1>
+<p class="error-banner">⚠️ This permanently deletes your own messages in the selected chat. This cannot be undone.</p>
+<button onclick="startScan()">Scan My Activity</button>
+<div class="progress-bar-outer"><div id="scan-bar" class="progress-bar-inner" style="width:0%"></div></div>
+<p id="scan-status"></p>
+<table id="results"><thead><tr><th></th><th>Type</th><th>Name</th><th>My Msgs</th></tr></thead><tbody></tbody></table>
+
+<div id="confirm-section" style="display:none">
+  <h2 id="confirm-title"></h2>
+  <div id="preview"></div>
+  <p>Type the chat name below to confirm permanent deletion:</p>
+  <input id="confirm-input" placeholder="Type chat name exactly" />
+  <button onclick="doPurge()">DELETE ALL MY MESSAGES</button>
+  <div class="progress-bar-outer"><div id="purge-bar" class="progress-bar-inner" style="width:0%"></div></div>
+  <p id="purge-status"></p>
+</div>
+
+<script>
+  let selectedChat = null;
+
+  function startScan() {
+    const ws = openProgressSocket("/utilities/purge/scan/ws", (data) => {
+      if (data.error) {
+        document.getElementById("scan-status").textContent = "Error: " + data.error;
+        return;
+      }
+      document.getElementById("scan-status").textContent = data.message;
+      if (data.total) {
+        document.getElementById("scan-bar").style.width = Math.round((data.current / data.total) * 100) + "%";
+      }
+      if (data.done && data.chats) {
+        const tbody = document.querySelector("#results tbody");
+        tbody.textContent = "";
+        data.chats.forEach((c) => {
+          const tr = document.createElement("tr");
+
+          const selectTd = document.createElement("td");
+          const btn = document.createElement("button");
+          btn.textContent = "Select";
+          btn.addEventListener("click", () => selectChat(c.id, c.name));
+          selectTd.appendChild(btn);
+
+          const typeTd = document.createElement("td");
+          typeTd.textContent = c.type;
+
+          const nameTd = document.createElement("td");
+          nameTd.textContent = c.name;
+
+          const countTd = document.createElement("td");
+          countTd.textContent = c.count;
+
+          tr.appendChild(selectTd);
+          tr.appendChild(typeTd);
+          tr.appendChild(nameTd);
+          tr.appendChild(countTd);
+          tbody.appendChild(tr);
+        });
+      }
+    });
+  }
+
+  async function selectChat(id, name) {
+    selectedChat = { id, name };
+    document.getElementById("confirm-title").textContent = "Purging: " + name;
+    document.getElementById("confirm-section").style.display = "block";
+    const resp = await fetch(`/utilities/purge/preview?group_id=${id}`);
+    const data = await resp.json();
+    const previewEl = document.getElementById("preview");
+    previewEl.textContent = "";
+    if (data.preview) {
+      data.preview.forEach((p) => {
+        const div = document.createElement("div");
+        div.textContent = `${p.date} | ${p.content}`;
+        previewEl.appendChild(div);
+      });
+    }
+  }
+
+  function doPurge() {
+    const confirmName = document.getElementById("confirm-input").value;
+    const ws = openProgressSocket("/utilities/purge/ws", (data) => {
+      if (data.error) {
+        document.getElementById("purge-status").textContent = "Error: " + data.error;
+        return;
+      }
+      document.getElementById("purge-status").textContent = data.message;
+      if (data.total) {
+        document.getElementById("purge-bar").style.width = Math.round((data.current / data.total) * 100) + "%";
+      }
+    });
+    ws.onopen = () => {
+      ws.send(JSON.stringify({
+        group_id: selectedChat.id, target_name: selectedChat.name, confirm_name: confirmName,
+      }));
+    };
+  }
+</script>
+{% endblock %}
