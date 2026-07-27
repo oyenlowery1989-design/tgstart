@@ -1470,11 +1470,13 @@ def select_session():
 async def main():
     # Try selection
     selected_session = None
-    try:
-        # Only run interactive if in terminal (stdin isatty check is good usually, but direct assume for now)
-        selected_session = select_session()
-    except Exception as e:
-        logger.warning(f"Session selection skipped: {e}")
+    if sys.stdin.isatty():
+        try:
+            selected_session = select_session()
+        except Exception as e:
+            logger.warning(f"Session selection skipped: {e}")
+    else:
+        logger.info("No TTY on stdin; skipping interactive session selection, using default session.")
 
     runner = GhostRunner(session_name=selected_session)
     await runner.start()

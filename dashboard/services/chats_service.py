@@ -5,31 +5,32 @@ from typing import Dict, List
 from telethon.tl.types import Channel, Chat, User
 
 from dashboard.state import ROOT_DIR
-from dashboard.tg_client import make_client
+from dashboard.tg_client import make_client, session_lock
 
 
 async def list_dialogs(session_name: str) -> List[Dict]:
-    client = make_client(session_name)
-    await client.start()
     rows: List[Dict] = []
-    try:
-        async for dialog in client.iter_dialogs():
-            entity = dialog.entity
-            dialog_type = "UNKNOWN"
-            if isinstance(entity, Channel):
-                dialog_type = "CHANNEL" if entity.broadcast else "GROUP"
-            elif isinstance(entity, Chat):
-                dialog_type = "GROUP"
-            elif isinstance(entity, User):
-                dialog_type = "USER"
-            rows.append({
-                "name": dialog.name,
-                "id": entity.id,
-                "type": dialog_type,
-                "username": getattr(entity, "username", None),
-            })
-    finally:
-        await client.disconnect()
+    async with session_lock(session_name):
+        client = make_client(session_name)
+        await client.start()
+        try:
+            async for dialog in client.iter_dialogs():
+                entity = dialog.entity
+                dialog_type = "UNKNOWN"
+                if isinstance(entity, Channel):
+                    dialog_type = "CHANNEL" if entity.broadcast else "GROUP"
+                elif isinstance(entity, Chat):
+                    dialog_type = "GROUP"
+                elif isinstance(entity, User):
+                    dialog_type = "USER"
+                rows.append({
+                    "name": dialog.name,
+                    "id": entity.id,
+                    "type": dialog_type,
+                    "username": getattr(entity, "username", None),
+                })
+        finally:
+            await client.disconnect()
     return rows
 
 
@@ -48,5 +49,5 @@ def save_dialogs_csv(rows: List[Dict]) -> str:
 if __name__ == "__main__":
     import inspect
     assert inspect.iscoroutinefunction(list_dialogs)
-    assert inspect.signature(save_dialogs_csv).parameters.keys() == {"rows"}.__iter__().__class__ or True
+    assert list(inspect.signature(save_dialogs_csv).parameters.keys()) == ["rows"]
     print("chats_service.py smoke check OK")

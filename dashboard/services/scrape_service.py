@@ -10,7 +10,7 @@ from typing import Awaitable, Callable, Dict, Iterable, List, Optional
 from telethon.tl.types import Message, MessageEntityTextUrl
 
 from dashboard.state import ROOT_DIR
-from dashboard.tg_client import make_client
+from dashboard.tg_client import make_client, session_lock
 from utils.tg_utils import slugify
 
 ProgressCB = Callable[[int, int, str], Awaitable[None]]
@@ -142,58 +142,59 @@ async def scrape_links(session_name: str, group_id: int, keyword: Optional[str] 
     out_dir.mkdir(parents=True, exist_ok=True)
     checkpoint_path = _checkpoint_path(out_dir, group_id)
 
-    client = make_client(session_name)
-    await client.start()
     last_id_scanned = 0
-    try:
-        entity = await client.get_entity(group_id)
-        offset_id = 0
-        if resume and checkpoint_path.exists():
-            data = json.loads(checkpoint_path.read_text())
-            offset_id = data.get("last_id", 0)
-        last_id_scanned = offset_id
+    async with session_lock(session_name):
+        client = make_client(session_name)
+        await client.start()
+        try:
+            entity = await client.get_entity(group_id)
+            offset_id = 0
+            if resume and checkpoint_path.exists():
+                data = json.loads(checkpoint_path.read_text())
+                offset_id = data.get("last_id", 0)
+            last_id_scanned = offset_id
 
-        async for msg in client.iter_messages(entity, limit=message_limit, offset_id=offset_id):
-            if not isinstance(msg, Message):
-                continue
-            last_id_scanned = msg.id
-            scanned += 1
-            if progress_cb:
-                await progress_cb(scanned, message_limit or 0, f"Found {len(seen)} links... ({scanned} msgs)")
-            msg_dt = msg.date
-            if msg_dt and msg_dt.tzinfo is None:
-                msg_dt = msg_dt.replace(tzinfo=timezone.utc)
-            msg_dt = (msg_dt or datetime.now(timezone.utc)).astimezone(timezone.utc)
-            if since_dt and msg_dt < since_dt:
-                break
-            oldest_dt_seen = msg_dt
-            topic_id = _get_topic_id(msg)
-            text = msg.raw_text or msg.message or ""
-            sender = getattr(msg, "sender", None)
-            user_id = getattr(sender, "id", None) if sender else None
-            username = getattr(sender, "username", None) if sender else None
-            first_name = getattr(sender, "first_name", None) if sender else None
-            last_name = getattr(sender, "last_name", None) if sender else None
+            async for msg in client.iter_messages(entity, limit=message_limit, offset_id=offset_id):
+                if not isinstance(msg, Message):
+                    continue
+                last_id_scanned = msg.id
+                scanned += 1
+                if progress_cb:
+                    await progress_cb(scanned, message_limit or 0, f"Found {len(seen)} links... ({scanned} msgs)")
+                msg_dt = msg.date
+                if msg_dt and msg_dt.tzinfo is None:
+                    msg_dt = msg_dt.replace(tzinfo=timezone.utc)
+                msg_dt = (msg_dt or datetime.now(timezone.utc)).astimezone(timezone.utc)
+                if since_dt and msg_dt < since_dt:
+                    break
+                oldest_dt_seen = msg_dt
+                topic_id = _get_topic_id(msg)
+                text = msg.raw_text or msg.message or ""
+                sender = getattr(msg, "sender", None)
+                user_id = getattr(sender, "id", None) if sender else None
+                username = getattr(sender, "username", None) if sender else None
+                first_name = getattr(sender, "first_name", None) if sender else None
+                last_name = getattr(sender, "last_name", None) if sender else None
 
-            for url in list(_urls_from_text_urls(msg)) + list(_urls_from_regex(text)):
-                if url and _passes_filter(url, keyword_lower, startswith) and url not in seen:
-                    seen[url] = LinkRecord(
-                        url=url, date_dt=msg_dt, message_id=msg.id, topic_id=topic_id,
-                        user_id=user_id, username=username, user_first=first_name, user_last=last_name,
-                        group_name=getattr(entity, "title", "N/A"), group_id=entity.id,
-                    )
+                for url in list(_urls_from_text_urls(msg)) + list(_urls_from_regex(text)):
+                    if url and _passes_filter(url, keyword_lower, startswith) and url not in seen:
+                        seen[url] = LinkRecord(
+                            url=url, date_dt=msg_dt, message_id=msg.id, topic_id=topic_id,
+                            user_id=user_id, username=username, user_first=first_name, user_last=last_name,
+                            group_name=getattr(entity, "title", "N/A"), group_id=entity.id,
+                        )
 
-        csv_path = _save_csv(seen, out_dir, getattr(entity, "title", "N/A"), entity.id)
-        if checkpoint_path.exists():
-            checkpoint_path.unlink()
-        return ScrapeResult(scanned=scanned, links=list(seen.values()), csv_path=csv_path,
-                             oldest_reached=oldest_dt_seen.isoformat() if oldest_dt_seen else None)
-    except Exception:
-        checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
-        checkpoint_path.write_text(json.dumps({"last_id": last_id_scanned}))
-        raise
-    finally:
-        await client.disconnect()
+            csv_path = _save_csv(seen, out_dir, getattr(entity, "title", "N/A"), entity.id)
+            if checkpoint_path.exists():
+                checkpoint_path.unlink()
+            return ScrapeResult(scanned=scanned, links=list(seen.values()), csv_path=csv_path,
+                                 oldest_reached=oldest_dt_seen.isoformat() if oldest_dt_seen else None)
+        except Exception:
+            checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+            checkpoint_path.write_text(json.dumps({"last_id": last_id_scanned}))
+            raise
+        finally:
+            await client.disconnect()
 
 
 def _save_csv(seen: Dict[str, LinkRecord], out_dir: Path, group_name: str, group_id: int) -> str:

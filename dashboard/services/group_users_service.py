@@ -6,7 +6,7 @@ from typing import Awaitable, Callable, Dict, List, Optional
 from telethon.tl.types import User
 
 from dashboard.state import ROOT_DIR
-from dashboard.tg_client import make_client
+from dashboard.tg_client import make_client, session_lock
 from utils.tg_utils import slugify
 
 ProgressCB = Callable[[int, int, str], Awaitable[None]]
@@ -17,28 +17,29 @@ AGGRESSIVE_SCRAPE_DEFAULT = os.getenv("AGGRESSIVE_SCRAPE", "false").strip().lowe
 
 async def list_group_users(session_name: str, group_id: int, export_phone_numbers: bool = False,
                             aggressive: bool = False, progress_cb: Optional[ProgressCB] = None) -> List[Dict]:
-    client = make_client(session_name)
-    await client.start()
     users: List[Dict] = []
-    try:
-        entity = await client.get_entity(group_id)
-        async for user in client.iter_participants(entity, aggressive=aggressive):
-            if not isinstance(user, User):
-                continue
-            users.append({
-                "id": user.id,
-                "username": user.username or "",
-                "first_name": user.first_name or "",
-                "last_name": user.last_name or "",
-                "phone": (user.phone or "") if export_phone_numbers else "",
-                "bot": user.bot,
-            })
+    async with session_lock(session_name):
+        client = make_client(session_name)
+        await client.start()
+        try:
+            entity = await client.get_entity(group_id)
+            async for user in client.iter_participants(entity, aggressive=aggressive):
+                if not isinstance(user, User):
+                    continue
+                users.append({
+                    "id": user.id,
+                    "username": user.username or "",
+                    "first_name": user.first_name or "",
+                    "last_name": user.last_name or "",
+                    "phone": (user.phone or "") if export_phone_numbers else "",
+                    "bot": user.bot,
+                })
+                if progress_cb:
+                    await progress_cb(len(users), 0, f"Found {len(users)} users...")
             if progress_cb:
-                await progress_cb(len(users), 0, f"Found {len(users)} users...")
-        if progress_cb:
-            await progress_cb(len(users), len(users), "Done")
-    finally:
-        await client.disconnect()
+                await progress_cb(len(users), len(users), "Done")
+        finally:
+            await client.disconnect()
     return users
 
 

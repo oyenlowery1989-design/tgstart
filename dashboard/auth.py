@@ -17,10 +17,17 @@ load_dotenv()
 
 DASHBOARD_USER = os.getenv("DASHBOARD_USER", "admin")
 DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "")
+LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
 def require_auth(conn: HTTPConnection) -> None:
     if not DASHBOARD_PASSWORD:
+        # Fail closed regardless of how the app was launched (python dashboard/app.py
+        # vs a bare `uvicorn dashboard.app:app --host 0.0.0.0`): without a password,
+        # only loopback clients may proceed.
+        client_host = conn.client.host if conn.client else None
+        if client_host not in LOOPBACK_HOSTS:
+            raise HTTPException(status_code=403, detail="Dashboard requires DASHBOARD_PASSWORD for non-loopback access")
         return
     auth_header = conn.headers.get("authorization", "")
     username = password = ""
