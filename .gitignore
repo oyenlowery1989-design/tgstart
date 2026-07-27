@@ -42,7 +42,7 @@ ENV/
 .venv_linux/
 
 # Archived/superseded code (kept locally, not tracked)
-6_messaging/_archived/
+6_messaging/_archived*/
 
 # Generated data files
 *.csv

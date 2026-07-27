@@ -1,4 +1,3 @@
-import os
 """
 Main Menu Launcher
 
@@ -6,10 +5,10 @@ The central entry point for the Telegram Automation Suite.
 Provides an interactive terminal menu to easy launch any of the other scripts
 (Login, Verify, Chats, Scraping, Monitoring, Messaging, Utils).
 """
+import os
 import sys
 import subprocess
 import time
-from utils import ui_utils
 from utils.ui_utils import console, box
 from rich.panel import Panel
 from rich.table import Table
