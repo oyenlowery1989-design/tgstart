@@ -1,8 +1,6 @@
 """Sessions tab: listing/verification + active-session switcher. Login endpoints added in Tasks 4-5."""
-from fastapi import APIRouter, Request, Form, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Request, Form, WebSocket
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
-from jinja2 import Environment, FileSystemLoader, select_autoescape
-from pathlib import Path
 
 from dashboard.state import list_sessions, get_active_session, ACTIVE_SESSION_COOKIE
 from dashboard.services.sessions_service import (
@@ -14,21 +12,10 @@ from dashboard.services.sessions_service import (
     wait_qr_flow,
     submit_qr_2fa,
 )
-
-_template_dir = str(Path(__file__).resolve().parent.parent / "templates")
-_jinja_env = Environment(
-    loader=FileSystemLoader(_template_dir),
-    autoescape=select_autoescape(['html', 'xml']),
-    cache_size=0
-)
+from dashboard.templates_env import render_template as _render_template
+from dashboard.ws_utils import ws_session
 
 router = APIRouter(prefix="/sessions")
-
-
-def _render_template(template_name: str, context: dict) -> str:
-    """Render a template with context."""
-    template = _jinja_env.get_template(template_name)
-    return template.render(**context)
 
 
 @router.get("", response_class=HTMLResponse)
@@ -91,8 +78,7 @@ async def login_qr_page(request: Request):
 
 @router.websocket("/login/qr/ws")
 async def login_qr_ws(websocket: WebSocket):
-    await websocket.accept()
-    try:
+    async with ws_session(websocket, require_session=False):
         started = await start_qr_flow()
         await websocket.send_json({"state": "waiting", "qr_png_b64": started["qr_png_b64"]})
         result = await wait_qr_flow(started["flow_id"])
@@ -104,7 +90,3 @@ async def login_qr_ws(websocket: WebSocket):
             await websocket.send_json({"state": "done", "session_name": result["session_name"]})
         else:
             await websocket.send_json({"state": "error", "error": result.get("error", "Unknown error")})
-    except WebSocketDisconnect:
-        pass
-    finally:
-        await websocket.close()

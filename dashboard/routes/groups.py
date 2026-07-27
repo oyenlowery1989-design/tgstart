@@ -1,29 +1,15 @@
 """Group Users tab, extracted from 3_chat_management/31_list_group_users.py."""
-from pathlib import Path
-
-from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Request, WebSocket
 from fastapi.responses import HTMLResponse
-from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from dashboard.state import get_active_session, list_sessions
 from dashboard.services.group_users_service import (
     list_group_users, save_group_users_csv, EXPORT_PHONE_NUMBERS_DEFAULT, AGGRESSIVE_SCRAPE_DEFAULT,
 )
-
-_template_dir = str(Path(__file__).resolve().parent.parent / "templates")
-_jinja_env = Environment(
-    loader=FileSystemLoader(_template_dir),
-    autoescape=select_autoescape(['html', 'xml']),
-    cache_size=0
-)
+from dashboard.templates_env import render_template as _render_template
+from dashboard.ws_utils import ws_session
 
 router = APIRouter(prefix="/groups")
-
-
-def _render_template(template_name: str, context: dict) -> str:
-    """Render a template with context."""
-    template = _jinja_env.get_template(template_name)
-    return template.render(**context)
 
 
 @router.get("/{group_id}/users", response_class=HTMLResponse)
@@ -37,17 +23,13 @@ async def group_users_page(request: Request, group_id: int):
 
 @router.websocket("/{group_id}/users/ws")
 async def group_users_ws(websocket: WebSocket, group_id: int):
-    await websocket.accept()
-    session_name = get_active_session(websocket)
-    if not session_name:
-        await websocket.send_json({"error": "No active session set."})
-        await websocket.close()
-        return
+    async with ws_session(websocket) as session_name:
+        if not session_name:
+            return
 
-    async def progress_cb(current: int, total: int, message: str):
-        await websocket.send_json({"current": current, "total": total, "message": message})
+        async def progress_cb(current: int, total: int, message: str):
+            await websocket.send_json({"current": current, "total": total, "message": message})
 
-    try:
         users = await list_group_users(
             session_name, group_id,
             export_phone_numbers=EXPORT_PHONE_NUMBERS_DEFAULT,
@@ -56,9 +38,3 @@ async def group_users_ws(websocket: WebSocket, group_id: int):
         )
         csv_path = save_group_users_csv(str(group_id), group_id, users, EXPORT_PHONE_NUMBERS_DEFAULT)
         await websocket.send_json({"current": len(users), "total": len(users), "message": f"Saved {csv_path}", "done": True})
-    except WebSocketDisconnect:
-        pass
-    except Exception as e:
-        await websocket.send_json({"error": str(e)})
-    finally:
-        await websocket.close()

@@ -1,27 +1,13 @@
 """Scraping tab, extracted from 4_scraping/41_scrape_links_advanced.py."""
-from pathlib import Path
-
-from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Request, WebSocket
 from fastapi.responses import HTMLResponse
-from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from dashboard.state import get_active_session, list_sessions
 from dashboard.services.scrape_service import scrape_links
-
-_template_dir = str(Path(__file__).resolve().parent.parent / "templates")
-_jinja_env = Environment(
-    loader=FileSystemLoader(_template_dir),
-    autoescape=select_autoescape(['html', 'xml']),
-    cache_size=0
-)
+from dashboard.templates_env import render_template as _render_template
+from dashboard.ws_utils import ws_session
 
 router = APIRouter(prefix="/scrape")
-
-
-def _render_template(template_name: str, context: dict) -> str:
-    """Render a template with context."""
-    template = _jinja_env.get_template(template_name)
-    return template.render(**context)
 
 
 @router.get("", response_class=HTMLResponse)
@@ -33,13 +19,9 @@ async def scrape_page(request: Request):
 
 @router.websocket("/ws")
 async def scrape_ws(websocket: WebSocket):
-    await websocket.accept()
-    session_name = get_active_session(websocket)
-    if not session_name:
-        await websocket.send_json({"error": "No active session set."})
-        await websocket.close()
-        return
-    try:
+    async with ws_session(websocket) as session_name:
+        if not session_name:
+            return
         params = await websocket.receive_json()
         group_id = int(params["group_id"])
         keyword = params.get("keyword") or None
@@ -59,9 +41,3 @@ async def scrape_ws(websocket: WebSocket):
             "current": result.scanned, "total": result.scanned,
             "message": f"Done. {len(result.links)} unique links -> {result.csv_path}", "done": True,
         })
-    except WebSocketDisconnect:
-        pass
-    except Exception as e:
-        await websocket.send_json({"error": str(e)})
-    finally:
-        await websocket.close()

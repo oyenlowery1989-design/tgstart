@@ -5,25 +5,12 @@ from pathlib import Path
 
 from fastapi import APIRouter, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+from dashboard.templates_env import render_template as _render_template
 
 DB_PATH = Path(__file__).resolve().parent.parent.parent / "6_messaging" / "65" / "data" / "ghost.db"
 
-# Initialize Jinja2 environment directly to avoid caching issues
-_template_dir = str(Path(__file__).resolve().parent.parent / "templates")
-_jinja_env = Environment(
-    loader=FileSystemLoader(_template_dir),
-    autoescape=select_autoescape(['html', 'xml']),
-    cache_size=0
-)
-
 router = APIRouter(prefix="/ghost")
-
-
-def _render_template(template_name: str, context: dict) -> str:
-    """Render a template with context."""
-    template = _jinja_env.get_template(template_name)
-    return template.render(**context)
 
 
 def get_db_connection():
