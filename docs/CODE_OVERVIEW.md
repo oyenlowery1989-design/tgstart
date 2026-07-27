@@ -46,13 +46,17 @@ A comprehensive set of tools to manage your Telegram automation. Each step build
   - **Action:** Analyzes activity to find top influencers and peak hours.
   - **Output:** `50_data/stats_<name>.csv`
 
-- **`64_claude_edition/`** (run via `run.py` choice 7):
-  - **Action:** Ghost Mirror, forensics edition. Stealth read, edit/delete tracking, logs.
-  - Has its own nested git repo — not tracked by the parent project's `.gitignore` rules.
-
-- **`65/`** (run via `run.py` choice 8):
-  - **Action:** Ghost Mirror v4.0. Runs bot (`run.py`) + FastAPI dashboard (`dashboard.py`) as a pair.
-  - **Config:** SQLite (`data/ghost.db`), dashboard gated by `DASHBOARD_PASSWORD` (HTTP Basic Auth, fail-closed on non-loopback host).
+- **`dashboard/`** (run via `run.py` choice 8, or `python dashboard/app.py` directly):
+  - **Action:** Full-suite web dashboard — login, sessions, chats, group users, scraping,
+    stats, Ghost Mirror, and utilities (participation/purge), all behind one HTTP Basic
+    auth gate.
+  - Manages `6_messaging/65/ghost_runner.py` (Ghost Mirror bot) as a supervised subprocess
+    internally; its routes read the same `6_messaging/65/data/ghost.db` SQLite backend.
+  - **Config:** dashboard gated by `DASHBOARD_PASSWORD` (HTTP Basic Auth, fail-closed on
+    non-loopback host).
+  - The older `6_messaging/64_claude_edition/` (CLI-only forensics edition) and
+    `6_messaging/65/dashboard.py` (its standalone dashboard pair) have both been retired;
+    see git history, not this file, for their design.
 
 ### 5. Utilities (`7_utilities/`)
 

@@ -80,11 +80,9 @@ python 5_monitoring/50_group_stats.py
 ### Messaging
 
 ```bash
-# Ghost Mirror - Claude Edition (forensics)
-python run.py  # choice 7 -> 6_messaging/64_claude_edition/run.py
-
-# Ghost Mirror - Dashboard v4.0 (bot + web UI)
-python run.py  # choice 8 -> 6_messaging/65/ (run.py + dashboard.py)
+# Ghost Mirror bot + full suite web dashboard
+python dashboard/app.py       # primary
+python run.py                 # choice 8 -> launches dashboard/app.py
 ```
 
 ### Utilities

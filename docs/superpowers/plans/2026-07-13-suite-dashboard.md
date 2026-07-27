@@ -1,5 +1,13 @@
 # Suite Dashboard Implementation Plan
 
+> **Status: shipped.** Every file this plan describes exists in the repo (`dashboard/`
+> package, ported Ghost Mirror routes, merged requirements.txt, retired
+> `6_messaging/65/venv/`). The unchecked `- [ ]` boxes below are stale — they were never
+> re-checked off after implementation, not evidence of pending work. Treat this as a
+> historical design doc, not a live task list.
+
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the terminal `run.py` menu with a single FastAPI web dashboard at repo root covering login, session verification, chat/group listing, scraping, group stats, purge, participation-finder, plus the existing Ghost Mirror dashboard — all behind one HTTP Basic auth gate.
