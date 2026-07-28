@@ -1,0 +1,230 @@
+"""SQLite persistence for bot_reply: per-chat config, the pending-reply queue, and
+settings. Separate from 6_messaging/65/ghost.db on purpose — ghost_runner.py owns that
+file's PRAGMA user_version migration chain, and two independent processes migrating one
+file would collide."""
+import datetime
+import sqlite3
+from pathlib import Path
+from typing import List, Optional
+
+DEFAULT_DB_PATH = Path(__file__).resolve().parent / "data" / "bot_reply.db"
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS chat_config (
+    chat_id          INTEGER PRIMARY KEY,
+    title            TEXT,
+    enabled          BOOLEAN NOT NULL DEFAULT 0,
+    trigger_mode     TEXT,
+    persona_override TEXT,
+    updated_at       TEXT
+);
+
+CREATE TABLE IF NOT EXISTS pending_replies (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id           INTEGER NOT NULL,
+    chat_title        TEXT,
+    source_message_id INTEGER NOT NULL,
+    source_text       TEXT,
+    source_sender     TEXT,
+    draft_text        TEXT NOT NULL,
+    status            TEXT NOT NULL DEFAULT 'pending',
+    approval_msg_id   INTEGER,
+    created_at        TEXT NOT NULL,
+    resolved_at       TEXT,
+    sent_message_id   INTEGER,
+    error             TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pending_source
+    ON pending_replies(chat_id, source_message_id);
+
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+);
+"""
+
+
+def get_connection(db_path: str = None) -> sqlite3.Connection:
+    path = Path(db_path) if db_path else DEFAULT_DB_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(path), check_same_thread=False, timeout=5.0)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
+    conn.execute("PRAGMA busy_timeout=5000;")
+    conn.execute("PRAGMA foreign_keys=ON;")
+    init_schema(conn)
+    return conn
+
+
+def init_schema(conn: sqlite3.Connection) -> None:
+    conn.executescript(_SCHEMA)
+    conn.commit()
+
+
+def _now() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+def get_setting(conn: sqlite3.Connection, key: str, default: Optional[str] = None) -> Optional[str]:
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def set_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (key, value),
+    )
+    conn.commit()
+    bump_config(conn)
+
+
+def bump_config(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES ('config_bump', ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (_now(),),
+    )
+    conn.commit()
+
+
+def get_chat_config(conn: sqlite3.Connection, chat_id: int) -> Optional[dict]:
+    row = conn.execute("SELECT * FROM chat_config WHERE chat_id = ?", (chat_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def upsert_chat_config(conn: sqlite3.Connection, chat_id: int, title: str, **fields) -> None:
+    existing = get_chat_config(conn, chat_id)
+    if existing is None:
+        conn.execute(
+            "INSERT INTO chat_config (chat_id, title, updated_at) VALUES (?, ?, ?)",
+            (chat_id, title, _now()),
+        )
+    if fields:
+        set_clause = ", ".join(f"{k} = ?" for k in fields)
+        conn.execute(
+            f"UPDATE chat_config SET title = ?, updated_at = ?, {set_clause} WHERE chat_id = ?",
+            (title, _now(), *fields.values(), chat_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE chat_config SET title = ?, updated_at = ? WHERE chat_id = ?",
+            (title, _now(), chat_id),
+        )
+    conn.commit()
+    bump_config(conn)
+
+
+def insert_pending_reply(conn: sqlite3.Connection, chat_id: int, chat_title: str,
+                          source_message_id: int, source_text: str, source_sender: str,
+                          draft_text: str) -> Optional[int]:
+    try:
+        cur = conn.execute(
+            """INSERT INTO pending_replies
+               (chat_id, chat_title, source_message_id, source_text, source_sender,
+                draft_text, status, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)""",
+            (chat_id, chat_title, source_message_id, source_text, source_sender,
+             draft_text, _now()),
+        )
+        conn.commit()
+        return cur.lastrowid
+    except sqlite3.IntegrityError:
+        # (chat_id, source_message_id) already has a row — duplicate event, not a new draft.
+        return None
+
+
+def set_approval_msg_id(conn: sqlite3.Connection, reply_id: int, approval_msg_id: int) -> None:
+    conn.execute(
+        "UPDATE pending_replies SET approval_msg_id = ? WHERE id = ?",
+        (approval_msg_id, reply_id),
+    )
+    conn.commit()
+
+
+def try_resolve_pending(conn: sqlite3.Connection, reply_id: int, new_status: str) -> bool:
+    """The double-send guard: only the caller that actually flips 'pending' -> new_status
+    may act on the result. Works identically whether the racer is the DM button, the
+    dashboard button, or a retried event."""
+    cur = conn.execute(
+        "UPDATE pending_replies SET status = ?, resolved_at = ? WHERE id = ? AND status = 'pending'",
+        (new_status, _now(), reply_id),
+    )
+    conn.commit()
+    return cur.rowcount == 1
+
+
+def get_pending_reply(conn: sqlite3.Connection, reply_id: int) -> Optional[dict]:
+    row = conn.execute("SELECT * FROM pending_replies WHERE id = ?", (reply_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def list_pending_replies(conn: sqlite3.Connection, status: Optional[str] = None) -> List[dict]:
+    if status:
+        rows = conn.execute(
+            "SELECT * FROM pending_replies WHERE status = ? ORDER BY created_at DESC", (status,)
+        ).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM pending_replies ORDER BY created_at DESC").fetchall()
+    return [dict(r) for r in rows]
+
+
+def mark_sent(conn: sqlite3.Connection, reply_id: int, sent_message_id: int) -> None:
+    conn.execute(
+        "UPDATE pending_replies SET status = 'sent', sent_message_id = ? WHERE id = ?",
+        (sent_message_id, reply_id),
+    )
+    conn.commit()
+
+
+def mark_failed(conn: sqlite3.Connection, reply_id: int, error: str) -> None:
+    conn.execute(
+        "UPDATE pending_replies SET status = 'failed', error = ? WHERE id = ?",
+        (error, reply_id),
+    )
+    conn.commit()
+
+
+def expire_stale_pending(conn: sqlite3.Connection, ttl_hours: float) -> int:
+    cutoff = (datetime.datetime.now(datetime.timezone.utc)
+              - datetime.timedelta(hours=ttl_hours)).isoformat()
+    cur = conn.execute(
+        "UPDATE pending_replies SET status = 'expired' "
+        "WHERE status IN ('pending', 'approved') AND created_at < ?",
+        (cutoff,),
+    )
+    conn.commit()
+    return cur.rowcount
+
+
+if __name__ == "__main__":
+    # Smoke check: the double-send invariant must hold — exactly one of two concurrent
+    # resolve attempts on the same row may win.
+    conn = get_connection(":memory:")
+    reply_id = insert_pending_reply(conn, chat_id=1, chat_title="Test", source_message_id=100,
+                                     source_text="hi", source_sender="alice", draft_text="hello!")
+    assert reply_id is not None
+    duplicate = insert_pending_reply(conn, chat_id=1, chat_title="Test", source_message_id=100,
+                                      source_text="hi", source_sender="alice", draft_text="hello again")
+    assert duplicate is None, "duplicate (chat_id, source_message_id) must be rejected"
+
+    first = try_resolve_pending(conn, reply_id, "approved")
+    second = try_resolve_pending(conn, reply_id, "approved")
+    assert first is True, "first resolve attempt must win"
+    assert second is False, "second resolve attempt on an already-resolved row must lose"
+
+    row = get_pending_reply(conn, reply_id)
+    assert row["status"] == "approved"
+
+    set_setting(conn, "provider", "vertex")
+    assert get_setting(conn, "provider") == "vertex"
+    assert get_setting(conn, "config_bump") is not None, "set_setting must bump config_bump"
+
+    upsert_chat_config(conn, chat_id=42, title="Some Group", enabled=1, trigger_mode="mentions")
+    cfg = get_chat_config(conn, 42)
+    assert cfg["enabled"] == 1 and cfg["trigger_mode"] == "mentions"
+
+    print("db.py smoke check OK")
