@@ -158,7 +158,12 @@ async def _send_approved_reply(reply_id: int, conn, user_client) -> None:
     except Exception as e:
         db.mark_failed(conn, reply_id, str(e))
         return
-    db.mark_sent(conn, reply_id, sent.id)
+    try:
+        db.mark_sent(conn, reply_id, sent.id)
+    except Exception as e:
+        # Message was actually delivered; don't call mark_failed (that would be a lie).
+        # Row stays 'approved' — safe but stale, since try_resolve_pending already blocks reprocessing.
+        print(f"[bot_reply] mark_sent failed for reply {reply_id} after successful send: {e}", file=sys.stderr)
 
 
 async def on_button_callback(event, conn, user_client) -> None:
