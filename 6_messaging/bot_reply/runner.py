@@ -155,9 +155,10 @@ async def _send_approved_reply(reply_id: int, conn, user_client) -> None:
         sent = await user_client.send_message(
             row["chat_id"], row["draft_text"], reply_to=row["source_message_id"],
         )
-        db.mark_sent(conn, reply_id, sent.id)
     except Exception as e:
         db.mark_failed(conn, reply_id, str(e))
+        return
+    db.mark_sent(conn, reply_id, sent.id)
 
 
 async def on_button_callback(event, conn, user_client) -> None:
