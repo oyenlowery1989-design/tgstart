@@ -97,6 +97,11 @@ def get_chat_config(conn: sqlite3.Connection, chat_id: int) -> Optional[dict]:
 
 
 def upsert_chat_config(conn: sqlite3.Connection, chat_id: int, title: str, **fields) -> None:
+    allowed_fields = {"enabled", "trigger_mode", "persona_override"}
+    invalid_fields = set(fields.keys()) - allowed_fields
+    if invalid_fields:
+        raise ValueError(f"unknown chat_config fields: {invalid_fields}")
+
     existing = get_chat_config(conn, chat_id)
     if existing is None:
         conn.execute(
@@ -132,9 +137,11 @@ def insert_pending_reply(conn: sqlite3.Connection, chat_id: int, chat_title: str
         )
         conn.commit()
         return cur.lastrowid
-    except sqlite3.IntegrityError:
-        # (chat_id, source_message_id) already has a row — duplicate event, not a new draft.
-        return None
+    except sqlite3.IntegrityError as e:
+        # Only treat UNIQUE constraint violation on idx_pending_source as a duplicate.
+        if "UNIQUE constraint failed" in str(e) or "idx_pending_source" in str(e):
+            return None
+        raise
 
 
 def set_approval_msg_id(conn: sqlite3.Connection, reply_id: int, approval_msg_id: int) -> None:
