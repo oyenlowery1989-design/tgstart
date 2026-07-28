@@ -113,8 +113,104 @@ async def handle_new_message(event, conn, provider_fn, me_id: int) -> None:
         await notify_approval_bot(reply_id)
 
 
+from telethon import Button
+
+# Tracks in-progress "waiting for edited text" state per operator, keyed by the reply id
+# the operator is currently editing. Small and short-lived (cleared once resolved), so a
+# plain dict is enough — this process holds both clients, no cross-process state needed.
+_pending_edits: dict = {}
+
+
+def _approval_text(row: dict) -> str:
+    return (
+        f"**{row['chat_title']}** — {row['source_sender']}:\n"
+        f"> {row['source_text']}\n\n"
+        f"Draft reply:\n{row['draft_text']}"
+    )
+
+
+def _approval_buttons(reply_id: int):
+    return [
+        [Button.inline("Approve", f"approve:{reply_id}".encode()),
+         Button.inline("Edit", f"edit:{reply_id}".encode()),
+         Button.inline("Reject", f"reject:{reply_id}".encode())],
+    ]
+
+
+async def send_draft_for_approval(reply_id: int, approval_client, operator_user_id: int, conn) -> None:
+    row = db.get_pending_reply(conn, reply_id)
+    if row is None:
+        return
+    msg = await approval_client.send_message(
+        operator_user_id, _approval_text(row), buttons=_approval_buttons(reply_id),
+    )
+    db.set_approval_msg_id(conn, reply_id, msg.id)
+
+
+async def _send_approved_reply(reply_id: int, conn, user_client) -> None:
+    row = db.get_pending_reply(conn, reply_id)
+    if row is None:
+        return
+    try:
+        sent = await user_client.send_message(
+            row["chat_id"], row["draft_text"], reply_to=row["source_message_id"],
+        )
+        db.mark_sent(conn, reply_id, sent.id)
+    except Exception as e:
+        db.mark_failed(conn, reply_id, str(e))
+
+
+async def on_button_callback(event, conn, user_client) -> None:
+    data = event.data.decode()
+    action, _, id_str = data.partition(":")
+    reply_id = int(id_str)
+
+    if action == "approve":
+        won = db.try_resolve_pending(conn, reply_id, "approved")
+        if won:
+            await _send_approved_reply(reply_id, conn, user_client)
+            row = db.get_pending_reply(conn, reply_id)
+            status_line = "Sent." if row["status"] == "sent" else f"Failed: {row['error']}"
+            await event.edit(f"{_approval_text(row)}\n\n**{status_line}**", buttons=None)
+        else:
+            row = db.get_pending_reply(conn, reply_id)
+            await event.answer(f"Already {row['status']}.", alert=True)
+
+    elif action == "reject":
+        won = db.try_resolve_pending(conn, reply_id, "rejected")
+        row = db.get_pending_reply(conn, reply_id)
+        if won:
+            await event.edit(f"{_approval_text(row)}\n\n**Rejected.**", buttons=None)
+        else:
+            await event.answer(f"Already {row['status']}.", alert=True)
+
+    elif action == "edit":
+        row = db.get_pending_reply(conn, reply_id)
+        if row["status"] != "pending":
+            await event.answer(f"Already {row['status']}.", alert=True)
+            return
+        _pending_edits[event.sender_id] = reply_id
+        await event.respond("Send the replacement reply text now.")
+        await event.answer()
+
+
+async def on_edit_text_message(event, conn, user_client) -> None:
+    """Approval bot's plain-text handler: if the operator is mid-edit, the next message
+    they send is the replacement draft text."""
+    reply_id = _pending_edits.pop(event.sender_id, None)
+    if reply_id is None:
+        return
+    conn.execute("UPDATE pending_replies SET draft_text = ? WHERE id = ? AND status = 'pending'",
+                 (event.raw_text, reply_id))
+    conn.commit()
+    row = db.get_pending_reply(conn, reply_id)
+    await event.respond(f"Updated. Reviewing:\n\n{_approval_text(row)}",
+                         buttons=_approval_buttons(reply_id))
+
+
 if __name__ == "__main__":
     import inspect
-    assert inspect.iscoroutinefunction(handle_new_message)
-    assert callable(build_globals) and callable(build_chat_config)
-    print("runner.py (drafting half) smoke check OK — signatures present")
+    assert inspect.iscoroutinefunction(send_draft_for_approval)
+    assert inspect.iscoroutinefunction(on_button_callback)
+    assert inspect.iscoroutinefunction(on_edit_text_message)
+    print("runner.py (approval half) smoke check OK — signatures present")
