@@ -214,9 +214,97 @@ async def on_edit_text_message(event, conn, user_client) -> None:
                          buttons=_approval_buttons(reply_id))
 
 
+async def _config_refresh_loop(conn, state: dict):
+    """Polls settings.config_bump; on change, nothing to cache here (config is read
+    fresh per-message via build_globals/build_chat_config), but this loop is also where
+    a session_name change is detected so main() can request a restart."""
+    last_bump = db.get_setting(conn, "config_bump", "0")
+    while True:
+        await asyncio.sleep(CONFIG_POLL_INTERVAL)
+        current_bump = db.get_setting(conn, "config_bump", "0")
+        if current_bump != last_bump:
+            last_bump = current_bump
+            current_session = db.get_setting(conn, "session_name")
+            if current_session and current_session != state["session_name"]:
+                print("[bot_reply] session_name changed; exiting for supervisor restart",
+                      file=sys.stderr)
+                sys.exit(0)
+
+
+async def _approved_poll_loop(conn, user_client):
+    """Sends replies approved from the dashboard (which has no Telegram client of its
+    own and can only flip status to 'approved')."""
+    while True:
+        await asyncio.sleep(APPROVED_POLL_INTERVAL)
+        for row in db.list_pending_replies(conn, status="approved"):
+            await _send_approved_reply(row["id"], conn, user_client)
+
+
+async def _expiry_sweep_loop(conn):
+    while True:
+        await asyncio.sleep(EXPIRY_SWEEP_INTERVAL)
+        ttl_hours = float(db.get_setting(conn, "draft_ttl_hours", str(DEFAULT_TTL_HOURS)))
+        db.expire_stale_pending(conn, ttl_hours)
+
+
+async def main():
+    global notify_approval_bot
+
+    conn = db.get_connection()
+    session_name = db.get_setting(conn, "session_name")
+    if not session_name:
+        print("[bot_reply] no session_name configured in settings; exiting.", file=sys.stderr)
+        return
+
+    provider_name = db.get_setting(conn, "provider", "vertex")
+    provider_fn = providers.get_provider(provider_name)
+
+    bot_token = os.getenv("BOT_REPLY_APPROVAL_BOT_TOKEN", "")
+    operator_user_id_str = os.getenv("BOT_REPLY_OPERATOR_USER_ID", "0")
+    operator_user_id = int(operator_user_id_str) if operator_user_id_str else 0
+    if not bot_token or not operator_user_id:
+        print("[bot_reply] BOT_REPLY_APPROVAL_BOT_TOKEN / BOT_REPLY_OPERATOR_USER_ID "
+              "must be set in .env; exiting.", file=sys.stderr)
+        return
+
+    user_client = TelegramClient(session_path(session_name), API_ID, API_HASH)
+    approval_client = TelegramClient(
+        str(Path(__file__).resolve().parent / "data" / "approval_bot"), API_ID, API_HASH,
+    )
+
+    await user_client.start()
+    await approval_client.start(bot_token=bot_token)
+
+    me = await user_client.get_me()
+
+    async def _notify(reply_id: int) -> None:
+        await send_draft_for_approval(reply_id, approval_client, operator_user_id, conn)
+    notify_approval_bot = _notify
+
+    @user_client.on(events.NewMessage(incoming=True))
+    async def _on_new_message(event):
+        await handle_new_message(event, conn, provider_fn, me.id)
+
+    @approval_client.on(events.CallbackQuery())
+    async def _on_callback(event):
+        await on_button_callback(event, conn, user_client)
+
+    @approval_client.on(events.NewMessage(incoming=True, chats=operator_user_id))
+    async def _on_edit_text(event):
+        await on_edit_text_message(event, conn, user_client)
+
+    state = {"session_name": session_name}
+    await asyncio.gather(
+        _config_refresh_loop(conn, state),
+        _approved_poll_loop(conn, user_client),
+        _expiry_sweep_loop(conn),
+        user_client.run_until_disconnected(),
+        approval_client.run_until_disconnected(),
+    )
+
+
 if __name__ == "__main__":
-    import inspect
-    assert inspect.iscoroutinefunction(send_draft_for_approval)
-    assert inspect.iscoroutinefunction(on_button_callback)
-    assert inspect.iscoroutinefunction(on_edit_text_message)
-    print("runner.py (approval half) smoke check OK — signatures present")
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, EOFError):
+        pass
