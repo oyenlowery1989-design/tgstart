@@ -164,6 +164,18 @@ def try_resolve_pending(conn: sqlite3.Connection, reply_id: int, new_status: str
     return cur.rowcount == 1
 
 
+def try_claim_for_sending(conn: sqlite3.Connection, reply_id: int) -> bool:
+    """Guards 'approved' -> 'sending', the same single-winner pattern as
+    try_resolve_pending, but for the second race: the button-approve path and
+    _approved_poll_loop can both observe an 'approved' row and both try to send it."""
+    cur = conn.execute(
+        "UPDATE pending_replies SET status = 'sending' WHERE id = ? AND status = 'approved'",
+        (reply_id,),
+    )
+    conn.commit()
+    return cur.rowcount == 1
+
+
 def get_pending_reply(conn: sqlite3.Connection, reply_id: int) -> Optional[dict]:
     row = conn.execute("SELECT * FROM pending_replies WHERE id = ?", (reply_id,)).fetchone()
     return dict(row) if row else None
@@ -225,6 +237,11 @@ if __name__ == "__main__":
 
     row = get_pending_reply(conn, reply_id)
     assert row["status"] == "approved"
+
+    claim_first = try_claim_for_sending(conn, reply_id)
+    claim_second = try_claim_for_sending(conn, reply_id)
+    assert claim_first is True, "first sending-claim attempt must win"
+    assert claim_second is False, "second sending-claim attempt on an already-claimed row must lose"
 
     set_setting(conn, "provider", "vertex")
     assert get_setting(conn, "provider") == "vertex"

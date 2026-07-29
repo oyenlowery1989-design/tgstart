@@ -148,6 +148,8 @@ async def send_draft_for_approval(reply_id: int, approval_client, operator_user_
 
 
 async def _send_approved_reply(reply_id: int, conn, user_client) -> None:
+    if not db.try_claim_for_sending(conn, reply_id):
+        return  # already sent, sending, or not approved — someone else won the race
     row = db.get_pending_reply(conn, reply_id)
     if row is None:
         return
@@ -221,14 +223,19 @@ async def _config_refresh_loop(conn, state: dict):
     last_bump = db.get_setting(conn, "config_bump", "0")
     while True:
         await asyncio.sleep(CONFIG_POLL_INTERVAL)
-        current_bump = db.get_setting(conn, "config_bump", "0")
-        if current_bump != last_bump:
-            last_bump = current_bump
-            current_session = db.get_setting(conn, "session_name")
-            if current_session and current_session != state["session_name"]:
-                print("[bot_reply] session_name changed; exiting for supervisor restart",
-                      file=sys.stderr)
-                sys.exit(0)
+        try:
+            current_bump = db.get_setting(conn, "config_bump", "0")
+            if current_bump != last_bump:
+                last_bump = current_bump
+                current_session = db.get_setting(conn, "session_name")
+                if current_session and current_session != state["session_name"]:
+                    print("[bot_reply] session_name changed; exiting for supervisor restart",
+                          file=sys.stderr)
+                    sys.exit(0)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"[bot_reply] config refresh loop error: {e}", file=sys.stderr)
 
 
 async def _approved_poll_loop(conn, user_client):
@@ -236,15 +243,25 @@ async def _approved_poll_loop(conn, user_client):
     own and can only flip status to 'approved')."""
     while True:
         await asyncio.sleep(APPROVED_POLL_INTERVAL)
-        for row in db.list_pending_replies(conn, status="approved"):
-            await _send_approved_reply(row["id"], conn, user_client)
+        try:
+            for row in db.list_pending_replies(conn, status="approved"):
+                await _send_approved_reply(row["id"], conn, user_client)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"[bot_reply] approved poll loop error: {e}", file=sys.stderr)
 
 
 async def _expiry_sweep_loop(conn):
     while True:
         await asyncio.sleep(EXPIRY_SWEEP_INTERVAL)
-        ttl_hours = float(db.get_setting(conn, "draft_ttl_hours", str(DEFAULT_TTL_HOURS)))
-        db.expire_stale_pending(conn, ttl_hours)
+        try:
+            ttl_hours = float(db.get_setting(conn, "draft_ttl_hours", str(DEFAULT_TTL_HOURS)))
+            db.expire_stale_pending(conn, ttl_hours)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"[bot_reply] expiry sweep loop error: {e}", file=sys.stderr)
 
 
 async def main():
