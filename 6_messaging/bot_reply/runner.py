@@ -13,6 +13,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT_DIR))
 
 from telethon import TelegramClient, events
+from telethon.errors import FloodWaitError
 
 import db
 import trigger
@@ -52,7 +53,7 @@ def build_chat_config(conn, chat_id: int, member_count: Optional[int]) -> trigge
     )
 
 
-async def handle_new_message(event, conn, provider_fn, me_id: int) -> None:
+async def handle_new_message(event, conn, me_id: int) -> None:
     chat = await event.get_chat()
     chat_id = event.chat_id
     sender = await event.get_sender()
@@ -63,7 +64,8 @@ async def handle_new_message(event, conn, provider_fn, me_id: int) -> None:
     chat_cfg = build_chat_config(conn, chat_id, member_count)
     globals_ = build_globals(conn)
 
-    is_mention = f"@{(await event.client.get_me()).username or ''}" in text if text else False
+    me_username = (await event.client.get_me()).username
+    is_mention = bool(me_username) and bool(text) and f"@{me_username}" in text
     reply_to = await event.get_reply_message() if event.is_reply else None
     is_reply_to_operator = bool(reply_to and reply_to.sender_id == me_id)
 
@@ -90,8 +92,14 @@ async def handle_new_message(event, conn, provider_fn, me_id: int) -> None:
         history.append({"sender": name, "text": hist_msg.raw_text or ""})
     history.reverse()
 
+    # Read fresh per draft (not resolved once at process startup) so switching
+    # provider/model from the dashboard hot-reloads within one config_bump poll cycle,
+    # matching the rest of this subsystem's hot-reload convention.
+    provider_fn = providers.get_provider(db.get_setting(conn, "provider", "vertex"))
+    model = db.get_setting(conn, "model") or None
+
     try:
-        draft = await provider_fn(persona_text, history, text)
+        draft = await provider_fn(persona_text, history, text, model=model)
     except Exception as e:
         # Drafting failures are logged, not queued — nothing to approve/reject yet.
         print(f"[bot_reply] draft failed for chat {chat_id}: {e}", file=sys.stderr)
@@ -157,6 +165,13 @@ async def _send_approved_reply(reply_id: int, conn, user_client) -> None:
         sent = await user_client.send_message(
             row["chat_id"], row["draft_text"], reply_to=row["source_message_id"],
         )
+    except FloodWaitError as e:
+        # Expected, transient: release back to 'approved' so _approved_poll_loop retries
+        # it on its next 2s pass instead of the reply being discarded permanently.
+        print(f"[bot_reply] FloodWait {e.seconds}s sending reply {reply_id}; will retry",
+              file=sys.stderr)
+        db.release_claim(conn, reply_id)
+        return
     except Exception as e:
         db.mark_failed(conn, reply_id, str(e))
         return
@@ -273,9 +288,6 @@ async def main():
         print("[bot_reply] no session_name configured in settings; exiting.", file=sys.stderr)
         return
 
-    provider_name = db.get_setting(conn, "provider", "vertex")
-    provider_fn = providers.get_provider(provider_name)
-
     bot_token = os.getenv("BOT_REPLY_APPROVAL_BOT_TOKEN", "")
     operator_user_id_str = os.getenv("BOT_REPLY_OPERATOR_USER_ID", "0")
     operator_user_id = int(operator_user_id_str) if operator_user_id_str else 0
@@ -300,7 +312,7 @@ async def main():
 
     @user_client.on(events.NewMessage(incoming=True))
     async def _on_new_message(event):
-        await handle_new_message(event, conn, provider_fn, me.id)
+        await handle_new_message(event, conn, me.id)
 
     @approval_client.on(events.CallbackQuery())
     async def _on_callback(event):

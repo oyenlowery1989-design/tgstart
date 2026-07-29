@@ -12,10 +12,13 @@ import os
 import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 BOT_REPLY_DIR = Path(__file__).resolve().parent.parent / "6_messaging" / "bot_reply"
 RESTART_DELAY = 2
+FAST_EXIT_THRESHOLD_SECONDS = 5
+MAX_CONSECUTIVE_FAST_EXITS = 3
 
 
 class BotReplyHandle:
@@ -23,6 +26,8 @@ class BotReplyHandle:
         self.proc = proc
         self.monitor_task = monitor_task
         self.stopping = False
+        self.spawned_at = time.monotonic()
+        self.consecutive_fast_exits = 0
 
 
 def _spawn() -> subprocess.Popen:
@@ -40,7 +45,21 @@ async def _monitor(handle: BotReplyHandle) -> None:
         if handle.stopping:
             return
         if handle.proc.poll() is not None:
+            if time.monotonic() - handle.spawned_at < FAST_EXIT_THRESHOLD_SECONDS:
+                handle.consecutive_fast_exits += 1
+            else:
+                handle.consecutive_fast_exits = 0
+            if handle.consecutive_fast_exits >= MAX_CONSECUTIVE_FAST_EXITS:
+                print(
+                    f"[bot_reply] runner exited immediately {handle.consecutive_fast_exits} "
+                    "times in a row — likely unconfigured (no session_name/provider/"
+                    "credentials set); not respawning further. Configure via the dashboard's "
+                    "/reply/setup page and restart the dashboard.",
+                    file=sys.stderr,
+                )
+                return
             handle.proc = _spawn()
+            handle.spawned_at = time.monotonic()
 
 
 def start_bot_reply() -> BotReplyHandle:

@@ -4,6 +4,15 @@
 <h1>Bot Reply Queue</h1>
 <p><a href="/reply/setup">Chat setup &amp; settings &raquo;</a></p>
 
+{% if not configured %}
+<p class="error-banner">
+  Bot Reply is not fully configured — the runner will not start. Set a session on
+  <a href="/reply/setup">Chat setup &amp; settings</a> and ensure
+  <code>BOT_REPLY_APPROVAL_BOT_TOKEN</code> / <code>BOT_REPLY_OPERATOR_USER_ID</code> are
+  set in <code>.env</code>, then restart the dashboard.
+</p>
+{% endif %}
+
 <h2>Pending approval</h2>
 <table id="pending-table">
   <thead><tr><th>Chat</th><th>From</th><th>Message</th><th>Draft reply</th><th>Actions</th></tr></thead>
@@ -45,24 +54,30 @@
 
 <h2>Recent</h2>
 <table>
-  <thead><tr><th>Status</th><th>Chat</th><th>From</th><th>Message</th><th>Draft reply</th></tr></thead>
+  <thead><tr><th>Status</th><th>Chat</th><th>From</th><th>Message</th><th>Draft reply</th><th>Actions</th></tr></thead>
   <tbody>
     {% for r in recent %}
-    <tr>
+    <tr id="recent-row-{{ r.id }}">
       <td>
         {% if r.status == 'sent' %}<span class="badge badge-success">sent</span>
         {% elif r.status == 'rejected' %}<span class="badge badge-warning">rejected</span>
         {% elif r.status == 'failed' %}<span class="badge badge-danger">failed</span>
         {% else %}<span class="badge badge-info">{{ r.status }}</span>
         {% endif %}
+        {% if r.status == 'failed' and r.error %}<br><small>{{ r.error }}</small>{% endif %}
       </td>
       <td>{{ r.chat_title }}</td>
       <td>{{ r.source_sender }}</td>
       <td>{{ r.source_text }}</td>
       <td>{{ r.draft_text }}</td>
+      <td>
+        {% if r.status == 'failed' %}
+        <button onclick="retryReply({{ r.id }})">Retry</button>
+        {% endif %}
+      </td>
     </tr>
     {% else %}
-    <tr><td colspan="5">No recent activity.</td></tr>
+    <tr><td colspan="6">No recent activity.</td></tr>
     {% endfor %}
   </tbody>
 </table>
@@ -83,6 +98,15 @@
       return;
     }
     document.getElementById("row-" + id).remove();
+  }
+
+  async function retryReply(id) {
+    const resp = await fetch(`/reply/api/pending/${id}/retry`, { method: "POST" });
+    if (!resp.ok) {
+      alert("Retry failed: " + resp.status);
+      return;
+    }
+    location.reload();
   }
 </script>
 {% endblock %}

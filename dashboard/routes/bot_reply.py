@@ -1,9 +1,12 @@
 """Bot Reply tab: pending-approval queue, per-chat config, and runner settings."""
+import os
 import sys
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
+from telethon.tl.types import Channel, Chat, User
+from telethon.utils import get_peer_id
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 BOT_REPLY_DIR = ROOT_DIR / "6_messaging" / "bot_reply"
@@ -12,14 +15,54 @@ if str(BOT_REPLY_DIR) not in sys.path:
 import db as bot_reply_db  # noqa: E402  (path must be set up first)
 
 from dashboard.state import get_active_session, list_sessions
-from dashboard.services.chats_service import list_dialogs
+from dashboard.tg_client import make_client, session_lock
 from dashboard.templates_env import render_template as _render_template
 
 router = APIRouter(prefix="/reply")
 
+# Single shared connection, reused across requests (sqlite3 with check_same_thread=False
+# is safe to share in this single-process FastAPI app — matches the pattern
+# dashboard/routes/ghost_mirror.py uses). A fresh connection per request, as this module
+# originally did, leaked a WAL file handle on every page load and toggle.
+_conn_singleton = None
+
 
 def _conn():
-    return bot_reply_db.get_connection()
+    global _conn_singleton
+    if _conn_singleton is None:
+        _conn_singleton = bot_reply_db.get_connection()
+    return _conn_singleton
+
+
+async def _list_dialogs_marked(session_name: str):
+    """Like dashboard.services.chats_service.list_dialogs, but yields Telethon's marked
+    chat id (telethon.utils.get_peer_id) instead of the bare entity id. chat_config.chat_id
+    and the runner's event.chat_id both live in the marked namespace (-100<channel_id> for
+    channels/supergroups, -<chat_id> for basic groups, unchanged for users); chats_service's
+    bare id is relied on by the already-working chats/scrape/stats/purge tabs and must not
+    change, so this subsystem normalizes locally instead."""
+    rows = []
+    async with session_lock(session_name):
+        client = make_client(session_name)
+        await client.start()
+        try:
+            async for dialog in client.iter_dialogs():
+                entity = dialog.entity
+                dialog_type = "UNKNOWN"
+                if isinstance(entity, Channel):
+                    dialog_type = "CHANNEL" if entity.broadcast else "GROUP"
+                elif isinstance(entity, Chat):
+                    dialog_type = "GROUP"
+                elif isinstance(entity, User):
+                    dialog_type = "USER"
+                rows.append({
+                    "chat_id": get_peer_id(entity),
+                    "name": dialog.name,
+                    "type": dialog_type,
+                })
+        finally:
+            await client.disconnect()
+    return rows
 
 
 @router.get("", response_class=HTMLResponse)
@@ -29,8 +72,15 @@ async def reply_queue_page(request: Request):
     approved = bot_reply_db.list_pending_replies(conn, status="approved")
     recent = [r for r in bot_reply_db.list_pending_replies(conn)
               if r["status"] in ("sent", "rejected", "failed", "expired")][:20]
+
+    session_name = bot_reply_db.get_setting(conn, "session_name")
+    bot_token = os.getenv("BOT_REPLY_APPROVAL_BOT_TOKEN", "")
+    operator_user_id = os.getenv("BOT_REPLY_OPERATOR_USER_ID", "")
+    configured = bool(session_name) and bool(bot_token) and bool(operator_user_id)
+
     return _render_template("reply/index.html", {
         "request": request, "pending": pending, "approved": approved, "recent": recent,
+        "configured": configured,
         "active_session": get_active_session(request), "all_sessions": list_sessions(),
     })
 
@@ -43,7 +93,7 @@ async def reply_setup_page(request: Request):
     error = None
     if session_name:
         try:
-            dialogs = await list_dialogs(session_name)
+            dialogs = await _list_dialogs_marked(session_name)
         except Exception as e:
             error = str(e)
 
@@ -54,9 +104,9 @@ async def reply_setup_page(request: Request):
 
     rows = []
     for d in dialogs:
-        cfg = configs.get(d["id"], {})
+        cfg = configs.get(d["chat_id"], {})
         rows.append({
-            "chat_id": d["id"], "name": d["name"], "type": d["type"],
+            "chat_id": d["chat_id"], "name": d["name"], "type": d["type"],
             "enabled": bool(cfg.get("enabled", 0)),
             "trigger_mode": cfg.get("trigger_mode"),
         })
@@ -134,3 +184,15 @@ async def api_reject(reply_id: int):
     if not won:
         raise HTTPException(409, f"Already {row['status']}")
     return {"status": "rejected"}
+
+
+@router.post("/api/pending/{reply_id}/retry")
+async def api_retry(reply_id: int):
+    conn = _conn()
+    row = bot_reply_db.get_pending_reply(conn, reply_id)
+    if row is None:
+        raise HTTPException(404, "No such pending reply")
+    won = bot_reply_db.retry_failed(conn, reply_id)
+    if not won:
+        raise HTTPException(409, f"Cannot retry from status {row['status']}")
+    return {"status": "approved"}

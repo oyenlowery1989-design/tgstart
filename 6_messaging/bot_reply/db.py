@@ -176,6 +176,28 @@ def try_claim_for_sending(conn: sqlite3.Connection, reply_id: int) -> bool:
     return cur.rowcount == 1
 
 
+def release_claim(conn: sqlite3.Connection, reply_id: int) -> None:
+    """Releases a 'sending' claim back to 'approved' (e.g. after a FloodWaitError), so
+    _approved_poll_loop naturally retries it on its next pass instead of the reply being
+    discarded on the first transient send failure."""
+    conn.execute(
+        "UPDATE pending_replies SET status = 'approved' WHERE id = ? AND status = 'sending'",
+        (reply_id,),
+    )
+    conn.commit()
+
+
+def retry_failed(conn: sqlite3.Connection, reply_id: int) -> bool:
+    """Manual operator retry from the dashboard: only a 'failed' row may be resurrected
+    back to 'approved', the same single-winner UPDATE pattern as try_resolve_pending."""
+    cur = conn.execute(
+        "UPDATE pending_replies SET status = 'approved', resolved_at = ? WHERE id = ? AND status = 'failed'",
+        (_now(), reply_id),
+    )
+    conn.commit()
+    return cur.rowcount == 1
+
+
 def get_pending_reply(conn: sqlite3.Connection, reply_id: int) -> Optional[dict]:
     row = conn.execute("SELECT * FROM pending_replies WHERE id = ?", (reply_id,)).fetchone()
     return dict(row) if row else None
@@ -262,5 +284,28 @@ if __name__ == "__main__":
     upsert_chat_config(conn, chat_id=42, title="Some Group", enabled=1, trigger_mode="mentions")
     cfg = get_chat_config(conn, 42)
     assert cfg["enabled"] == 1 and cfg["trigger_mode"] == "mentions"
+
+    # release_claim: a FloodWait mid-send must return the row to 'approved', not lose it.
+    reply_id2 = insert_pending_reply(conn, chat_id=2, chat_title="Test2", source_message_id=200,
+                                      source_text="hi2", source_sender="bob", draft_text="hello2")
+    assert try_resolve_pending(conn, reply_id2, "approved") is True
+    assert try_claim_for_sending(conn, reply_id2) is True
+    release_claim(conn, reply_id2)
+    assert get_pending_reply(conn, reply_id2)["status"] == "approved", \
+        "release_claim must return a 'sending' row to 'approved'"
+    assert try_claim_for_sending(conn, reply_id2) is True, "row must be re-claimable after release"
+
+    # retry_failed: only a 'failed' row may be resurrected to 'approved'.
+    mark_failed(conn, reply_id2, "boom")
+    assert get_pending_reply(conn, reply_id2)["status"] == "failed"
+    retry_first = retry_failed(conn, reply_id2)
+    retry_second = retry_failed(conn, reply_id2)
+    assert retry_first is True, "first retry of a failed row must win"
+    assert retry_second is False, "retrying an already-approved row must lose (not failed anymore)"
+    assert get_pending_reply(conn, reply_id2)["status"] == "approved"
+
+    reply_id3 = insert_pending_reply(conn, chat_id=3, chat_title="Test3", source_message_id=300,
+                                      source_text="hi3", source_sender="carol", draft_text="hello3")
+    assert retry_failed(conn, reply_id3) is False, "retry_failed must refuse a non-failed row (still pending)"
 
     print("db.py smoke check OK")
