@@ -57,13 +57,13 @@ async def stop_bot_reply(handle: BotReplyHandle) -> None:
     except ProcessLookupError:
         pass
     try:
-        handle.proc.wait(timeout=10)
+        await asyncio.to_thread(handle.proc.wait, timeout=10)
     except subprocess.TimeoutExpired:
         try:
             os.killpg(os.getpgid(handle.proc.pid), signal.SIGKILL)
         except ProcessLookupError:
             pass
-        handle.proc.wait()
+        await asyncio.to_thread(handle.proc.wait)
 
 
 if __name__ == "__main__":
