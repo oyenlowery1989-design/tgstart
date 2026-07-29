@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Bot Reply Queue{% endblock %}
+{% block content %}
+<h1>Bot Reply Queue</h1>
+<p><a href="/reply/setup">Chat setup &amp; settings &raquo;</a></p>
+
+<h2>Pending approval</h2>
+<table id="pending-table">
+  <thead><tr><th>Chat</th><th>From</th><th>Message</th><th>Draft reply</th><th>Actions</th></tr></thead>
+  <tbody>
+    {% for r in pending %}
+    <tr id="row-{{ r.id }}">
+      <td>{{ r.chat_title }}</td>
+      <td>{{ r.source_sender }}</td>
+      <td>{{ r.source_text }}</td>
+      <td>{{ r.draft_text }}</td>
+      <td>
+        <button onclick="resolve({{ r.id }}, 'approve')">Approve</button>
+        <button onclick="resolve({{ r.id }}, 'reject')">Reject</button>
+        <span id="status-{{ r.id }}"></span>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5">Nothing pending.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Approved, sending</h2>
+<table>
+  <thead><tr><th>Chat</th><th>From</th><th>Message</th><th>Draft reply</th></tr></thead>
+  <tbody>
+    {% for r in approved %}
+    <tr>
+      <td>{{ r.chat_title }}</td>
+      <td>{{ r.source_sender }}</td>
+      <td>{{ r.source_text }}</td>
+      <td>{{ r.draft_text }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4">None waiting to send.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Recent</h2>
+<table>
+  <thead><tr><th>Status</th><th>Chat</th><th>From</th><th>Message</th><th>Draft reply</th></tr></thead>
+  <tbody>
+    {% for r in recent %}
+    <tr>
+      <td>
+        {% if r.status == 'sent' %}<span class="badge badge-success">sent</span>
+        {% elif r.status == 'rejected' %}<span class="badge badge-warning">rejected</span>
+        {% elif r.status == 'failed' %}<span class="badge badge-danger">failed</span>
+        {% else %}<span class="badge badge-info">{{ r.status }}</span>
+        {% endif %}
+      </td>
+      <td>{{ r.chat_title }}</td>
+      <td>{{ r.source_sender }}</td>
+      <td>{{ r.source_text }}</td>
+      <td>{{ r.draft_text }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5">No recent activity.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% endblock %}
+{% block scripts %}
+<script>
+  async function resolve(id, action) {
+    const statusEl = document.getElementById("status-" + id);
+    const resp = await fetch(`/reply/api/pending/${id}/${action}`, { method: "POST" });
+    if (resp.status === 409) {
+      const data = await resp.json();
+      statusEl.textContent = "Already resolved: " + (data.detail || "");
+      return;
+    }
+    if (!resp.ok) {
+      statusEl.textContent = "Error: " + resp.status;
+      return;
+    }
+    document.getElementById("row-" + id).remove();
+  }
+</script>
+{% endblock %}

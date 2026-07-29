@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Bot Reply Setup{% endblock %}
+{% block content %}
+<h1>Bot Reply Setup</h1>
+<p><a href="/reply">&laquo; Back to queue</a></p>
+
+<h2>Runner settings</h2>
+<form id="settings-form">
+  <label>Session:
+    <select name="session_name">
+      {% for s in all_sessions %}
+      <option value="{{ s }}" {% if s == settings.session_name %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Provider:
+    <select name="provider">
+      <option value="vertex" {% if settings.provider == 'vertex' %}selected{% endif %}>vertex</option>
+      <option value="anthropic" {% if settings.provider == 'anthropic' %}selected{% endif %}>anthropic</option>
+    </select>
+  </label>
+  <label>Model: <input type="text" name="model" value="{{ settings.model }}"></label>
+  <label>Global trigger mode:
+    <select name="trigger_mode">
+      <option value="always" {% if settings.trigger_mode == 'always' %}selected{% endif %}>always</option>
+      <option value="mentions" {% if settings.trigger_mode == 'mentions' %}selected{% endif %}>mentions</option>
+      <option value="off" {% if settings.trigger_mode == 'off' %}selected{% endif %}>off</option>
+    </select>
+  </label>
+  <label>Small-group max size: <input type="number" name="small_group_max_size" value="{{ settings.small_group_max_size }}"></label>
+  <label>Draft TTL (hours): <input type="number" name="draft_ttl_hours" value="{{ settings.draft_ttl_hours }}"></label>
+  <label>History depth: <input type="number" name="history_depth" value="{{ settings.history_depth }}"></label>
+  <button type="submit">Save settings</button>
+  <span id="settings-status"></span>
+</form>
+
+<h2>Chats</h2>
+{% if error %}
+<p class="error-banner">Could not load chats: {{ error }}</p>
+{% else %}
+<table>
+  <thead>
+    <tr>
+      <th>Chat</th>
+      <th>Type</th>
+      <th>Enabled<br><small>Enabling a chat sends its messages to the configured AI provider.</small></th>
+      <th>Trigger mode</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr id="chat-row-{{ row.chat_id }}">
+      <td>{{ row.name }}</td>
+      <td>{{ row.type }}</td>
+      <td>
+        <label class="toggle-switch">
+          <input type="checkbox" onchange="toggleEnabled({{ row.chat_id }}, '{{ row.name|e }}', this.checked)" {% if row.enabled %}checked{% endif %}>
+          <span class="slider"></span>
+        </label>
+      </td>
+      <td>
+        <select onchange="setTriggerMode({{ row.chat_id }}, '{{ row.name|e }}', this.value)">
+          <option value="" {% if not row.trigger_mode %}selected{% endif %}>inherit global</option>
+          <option value="always" {% if row.trigger_mode == 'always' %}selected{% endif %}>always</option>
+          <option value="mentions" {% if row.trigger_mode == 'mentions' %}selected{% endif %}>mentions</option>
+          <option value="off" {% if row.trigger_mode == 'off' %}selected{% endif %}>off</option>
+        </select>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4">No chats found.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% endblock %}
+{% block scripts %}
+<script>
+  document.getElementById("settings-form").addEventListener("submit", async (evt) => {
+    evt.preventDefault();
+    const data = Object.fromEntries(new FormData(evt.target).entries());
+    const resp = await fetch("/reply/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    document.getElementById("settings-status").textContent = resp.ok ? "Saved." : "Error: " + resp.status;
+  });
+
+  async function toggleEnabled(chatId, title, enabled) {
+    await fetch(`/reply/api/chat/${chatId}/enable`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, enabled }),
+    });
+  }
+
+  async function setTriggerMode(chatId, title, mode) {
+    await fetch(`/reply/api/chat/${chatId}/trigger_mode`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, trigger_mode: mode || null }),
+    });
+  }
+</script>
+{% endblock %}
