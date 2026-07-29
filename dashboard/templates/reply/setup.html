@@ -54,12 +54,12 @@
       <td>{{ row.type }}</td>
       <td>
         <label class="toggle-switch">
-          <input type="checkbox" onchange="toggleEnabled({{ row.chat_id }}, '{{ row.name|e }}', this.checked)" {% if row.enabled %}checked{% endif %}>
+          <input type="checkbox" class="chat-enable" data-chat-id="{{ row.chat_id }}" data-name="{{ row.name }}" {% if row.enabled %}checked{% endif %}>
           <span class="slider"></span>
         </label>
       </td>
       <td>
-        <select onchange="setTriggerMode({{ row.chat_id }}, '{{ row.name|e }}', this.value)">
+        <select class="chat-trigger-mode" data-chat-id="{{ row.chat_id }}" data-name="{{ row.name }}">
           <option value="" {% if not row.trigger_mode %}selected{% endif %}>inherit global</option>
           <option value="always" {% if row.trigger_mode == 'always' %}selected{% endif %}>always</option>
           <option value="mentions" {% if row.trigger_mode == 'mentions' %}selected{% endif %}>mentions</option>
@@ -88,20 +88,24 @@
     document.getElementById("settings-status").textContent = resp.ok ? "Saved." : "Error: " + resp.status;
   });
 
-  async function toggleEnabled(chatId, title, enabled) {
-    await fetch(`/reply/api/chat/${chatId}/enable`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, enabled }),
+  document.querySelectorAll(".chat-enable").forEach((el) => {
+    el.addEventListener("change", async () => {
+      await fetch(`/reply/api/chat/${el.dataset.chatId}/enable`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: el.dataset.name, enabled: el.checked }),
+      });
     });
-  }
+  });
 
-  async function setTriggerMode(chatId, title, mode) {
-    await fetch(`/reply/api/chat/${chatId}/trigger_mode`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, trigger_mode: mode || null }),
+  document.querySelectorAll(".chat-trigger-mode").forEach((el) => {
+    el.addEventListener("change", async () => {
+      await fetch(`/reply/api/chat/${el.dataset.chatId}/trigger_mode`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: el.dataset.name, trigger_mode: el.value || null }),
+      });
     });
-  }
+  });
 </script>
 {% endblock %}
