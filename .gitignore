@@ -52,6 +52,8 @@ ENV/
 *.sqlite
 *.sqlite3
 6_messaging/65/data/
+6_messaging/bot_reply/data/*
+!6_messaging/bot_reply/data/.gitkeep
 
 # Keep data folder structure but ignore contents
 99_data/*

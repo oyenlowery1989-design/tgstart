@@ -58,6 +58,21 @@ A comprehensive set of tools to manage your Telegram automation. Each step build
     `6_messaging/65/dashboard.py` (its standalone dashboard pair) have both been retired;
     see git history, not this file, for their design.
 
+### Bot Reply (`6_messaging/bot_reply/`)
+
+AI-drafted, human-approved auto-replies, configured via the dashboard's Bot Reply tab
+(`/reply`, `/reply/setup`) rather than `.env` — the only required `.env` keys are
+credentials, which must never be committed:
+
+- `BOT_REPLY_APPROVAL_BOT_TOKEN` — the approval bot's token (from @BotFather)
+- `BOT_REPLY_OPERATOR_USER_ID` — your own Telegram user id, so the approval bot knows who to DM
+- `GOOGLE_APPLICATION_CREDENTIALS`, `GCP_PROJECT_ID`, `GCP_LOCATION` — required if using the `vertex` provider
+- `ANTHROPIC_API_KEY` — required if using the `anthropic` provider
+
+Everything else (which chats reply, trigger mode, provider/model choice, persona
+overrides) is configured live from `/reply/setup` and hot-reloads within ~2s via the
+same `config_bump` polling pattern Ghost Mirror uses — no restart needed.
+
 ### 5. Utilities (`7_utilities/`)
 
 - **`70_purge_my_messages.py`**:

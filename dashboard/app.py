@@ -13,21 +13,24 @@ import uvicorn
 
 from dashboard.auth import require_auth, DASHBOARD_PASSWORD
 from dashboard.ghost_process import start_ghost_bot, stop_ghost_bot
+from dashboard.bot_reply_process import start_bot_reply, stop_bot_reply
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     bot_proc = start_ghost_bot()
+    reply_handle = start_bot_reply()
     try:
         yield
     finally:
         stop_ghost_bot(bot_proc)
+        await stop_bot_reply(reply_handle)
 
 
 app = FastAPI(title="Telegram Suite Dashboard", dependencies=[Depends(require_auth)], lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
-from dashboard.routes import ghost_mirror, sessions, chats, groups, scrape, stats, utilities
+from dashboard.routes import ghost_mirror, sessions, chats, groups, scrape, stats, utilities, bot_reply
 app.include_router(ghost_mirror.router)
 app.include_router(sessions.router)
 app.include_router(chats.router)
@@ -35,6 +38,7 @@ app.include_router(groups.router)
 app.include_router(scrape.router)
 app.include_router(stats.router)
 app.include_router(utilities.router)
+app.include_router(bot_reply.router)
 
 
 @app.get("/")
