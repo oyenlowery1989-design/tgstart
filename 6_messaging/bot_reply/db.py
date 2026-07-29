@@ -212,7 +212,7 @@ def expire_stale_pending(conn: sqlite3.Connection, ttl_hours: float) -> int:
               - datetime.timedelta(hours=ttl_hours)).isoformat()
     cur = conn.execute(
         "UPDATE pending_replies SET status = 'expired' "
-        "WHERE status IN ('pending', 'approved') AND created_at < ?",
+        "WHERE status IN ('pending', 'approved', 'sending') AND created_at < ?",
         (cutoff,),
     )
     conn.commit()
@@ -242,6 +242,18 @@ if __name__ == "__main__":
     claim_second = try_claim_for_sending(conn, reply_id)
     assert claim_first is True, "first sending-claim attempt must win"
     assert claim_second is False, "second sending-claim attempt on an already-claimed row must lose"
+
+    # A row orphaned in 'sending' (crash between try_claim_for_sending and mark_sent/
+    # mark_failed) must still age out via expire_stale_pending, not be lost forever.
+    stale_cutoff = (datetime.datetime.now(datetime.timezone.utc)
+                    - datetime.timedelta(hours=1)).isoformat()
+    conn.execute("UPDATE pending_replies SET created_at = ? WHERE id = ?",
+                 (stale_cutoff, reply_id))
+    conn.commit()
+    expired_count = expire_stale_pending(conn, ttl_hours=0.5)
+    assert expired_count == 1, "stale 'sending' row must be expired"
+    row = get_pending_reply(conn, reply_id)
+    assert row["status"] == "expired", "stale 'sending' row must transition to 'expired'"
 
     set_setting(conn, "provider", "vertex")
     assert get_setting(conn, "provider") == "vertex"
