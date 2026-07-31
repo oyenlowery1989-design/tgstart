@@ -44,7 +44,13 @@ app.include_router(utilities.router)
 app.include_router(bot_reply.router)
 
 if FRONTEND_DIST.is_dir():
-    app.mount("/app", StaticFiles(directory=str(FRONTEND_DIST), html=True), name="frontend")
+    app.mount("/app/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="frontend-assets")
+
+    @app.get("/app")
+    @app.get("/app/{full_path:path}")
+    async def serve_frontend(full_path: str = ""):
+        from fastapi.responses import FileResponse
+        return FileResponse(str(FRONTEND_DIST / "index.html"))
 else:
     print(f"[dashboard] {FRONTEND_DIST} not found — run 'npm run build' in frontend/ "
           "to enable the new UI at /app. Falling back to the classic dashboard only.")
