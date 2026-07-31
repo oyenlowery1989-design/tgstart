@@ -28,6 +28,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Telegram Suite Dashboard", dependencies=[Depends(require_auth)], lifespan=lifespan)
+FRONTEND_DIST = ROOT_DIR / "frontend" / "dist"
+
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
 from dashboard.routes import ghost_mirror, sessions, chats, groups, scrape, stats, utilities, bot_reply
@@ -37,8 +39,15 @@ app.include_router(chats.router)
 app.include_router(groups.router)
 app.include_router(scrape.router)
 app.include_router(stats.router)
+app.include_router(stats.api_router)
 app.include_router(utilities.router)
 app.include_router(bot_reply.router)
+
+if FRONTEND_DIST.is_dir():
+    app.mount("/app", StaticFiles(directory=str(FRONTEND_DIST), html=True), name="frontend")
+else:
+    print(f"[dashboard] {FRONTEND_DIST} not found — run 'npm run build' in frontend/ "
+          "to enable the new UI at /app. Falling back to the classic dashboard only.")
 
 
 @app.get("/")
