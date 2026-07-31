@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
-from dashboard.state import get_active_session, list_sessions
+from dashboard.state import get_active_session, list_sessions, FRONTEND_AVAILABLE
 from dashboard.services.chats_service import list_dialogs, save_dialogs_csv
 from dashboard.templates_env import render_template as _render_template
 
@@ -23,5 +23,6 @@ async def chats_page(request: Request):
     html = _render_template("chats.html", {
         "request": request, "rows": rows, "error": error,
         "active_session": active, "all_sessions": list_sessions(),
+        "frontend_available": FRONTEND_AVAILABLE,
     })
     return html

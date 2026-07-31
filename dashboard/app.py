@@ -14,6 +14,7 @@ import uvicorn
 from dashboard.auth import require_auth, DASHBOARD_PASSWORD
 from dashboard.ghost_process import start_ghost_bot, stop_ghost_bot
 from dashboard.bot_reply_process import start_bot_reply, stop_bot_reply
+from dashboard.state import FRONTEND_DIST, FRONTEND_AVAILABLE
 
 
 @asynccontextmanager
@@ -28,7 +29,6 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Telegram Suite Dashboard", dependencies=[Depends(require_auth)], lifespan=lifespan)
-FRONTEND_DIST = ROOT_DIR / "frontend" / "dist"
 
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
@@ -43,7 +43,7 @@ app.include_router(stats.api_router)
 app.include_router(utilities.router)
 app.include_router(bot_reply.router)
 
-if FRONTEND_DIST.is_dir():
+if FRONTEND_AVAILABLE:
     app.mount("/app/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="frontend-assets")
 
     @app.get("/app")

@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Request, WebSocket
 from fastapi.responses import HTMLResponse
 
-from dashboard.state import get_active_session, list_sessions
+from dashboard.state import get_active_session, list_sessions, FRONTEND_AVAILABLE
 from dashboard.services.participation_service import find_participation
 from dashboard.templates_env import render_template as _render_template
 from dashboard.ws_utils import ws_session
@@ -14,6 +14,7 @@ router = APIRouter(prefix="/utilities")
 async def participation_page(request: Request):
     return _render_template("utilities_participation.html", {
         "request": request, "active_session": get_active_session(request), "all_sessions": list_sessions(),
+        "frontend_available": FRONTEND_AVAILABLE,
     })
 
 
@@ -42,6 +43,7 @@ from dashboard.services.purge_service import scan_my_activity, preview_my_messag
 async def purge_page(request: Request):
     return _render_template("utilities_purge.html", {
         "request": request, "active_session": get_active_session(request), "all_sessions": list_sessions(),
+        "frontend_available": FRONTEND_AVAILABLE,
     })
 
 

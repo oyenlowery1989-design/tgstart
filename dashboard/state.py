@@ -35,6 +35,10 @@ def get_active_session(request: Request) -> Optional[str]:
     return sessions[0] if sessions else None
 
 
+FRONTEND_DIST = ROOT_DIR / "frontend" / "dist"
+FRONTEND_AVAILABLE = FRONTEND_DIST.is_dir()
+
+
 if __name__ == "__main__":
     assert callable(list_sessions) and callable(session_path) and callable(get_active_session)
     print("state.py smoke check OK:", list_sessions())

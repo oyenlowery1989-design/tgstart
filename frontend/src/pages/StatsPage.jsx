@@ -62,6 +62,7 @@ export default function StatsPage() {
       setError("WebSocket connection error.");
       setScanning(false);
     };
+    ws.onclose = () => setScanning(false);
   }
 
   return (

@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Request, WebSocket
 from fastapi.responses import HTMLResponse
 
-from dashboard.state import get_active_session, list_sessions
+from dashboard.state import get_active_session, list_sessions, FRONTEND_AVAILABLE
 from dashboard.services.group_users_service import (
     list_group_users, save_group_users_csv, EXPORT_PHONE_NUMBERS_DEFAULT, AGGRESSIVE_SCRAPE_DEFAULT,
 )
@@ -17,6 +17,7 @@ async def group_users_page(request: Request, group_id: int):
     html = _render_template("groups.html", {
         "request": request, "group_id": group_id,
         "active_session": get_active_session(request), "all_sessions": list_sessions(),
+        "frontend_available": FRONTEND_AVAILABLE,
     })
     return html
 

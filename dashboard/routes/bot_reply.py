@@ -14,7 +14,7 @@ if str(BOT_REPLY_DIR) not in sys.path:
     sys.path.insert(0, str(BOT_REPLY_DIR))
 import db as bot_reply_db  # noqa: E402  (path must be set up first)
 
-from dashboard.state import get_active_session, list_sessions
+from dashboard.state import get_active_session, list_sessions, FRONTEND_AVAILABLE
 from dashboard.tg_client import make_client, session_lock
 from dashboard.templates_env import render_template as _render_template
 
@@ -82,6 +82,7 @@ async def reply_queue_page(request: Request):
         "request": request, "pending": pending, "approved": approved, "recent": recent,
         "configured": configured,
         "active_session": get_active_session(request), "all_sessions": list_sessions(),
+        "frontend_available": FRONTEND_AVAILABLE,
     })
 
 
@@ -125,6 +126,7 @@ async def reply_setup_page(request: Request):
         "request": request, "rows": rows, "error": error, "settings": settings,
         "all_sessions": list_sessions(),
         "active_session": get_active_session(request),
+        "frontend_available": FRONTEND_AVAILABLE,
     })
 
 

@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Request, Form, WebSocket
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
-from dashboard.state import list_sessions, get_active_session, ACTIVE_SESSION_COOKIE
+from dashboard.state import list_sessions, get_active_session, ACTIVE_SESSION_COOKIE, FRONTEND_AVAILABLE
 from dashboard.services.sessions_service import (
     check_all_sessions,
     start_phone_login,
@@ -26,6 +26,7 @@ async def sessions_page(request: Request):
         "results": results,
         "active_session": get_active_session(request),
         "all_sessions": list_sessions(),
+        "frontend_available": FRONTEND_AVAILABLE,
     })
     return html
 
@@ -45,6 +46,7 @@ async def login_phone_page(request: Request):
         "request": request,
         "active_session": get_active_session(request),
         "all_sessions": list_sessions(),
+        "frontend_available": FRONTEND_AVAILABLE,
     })
     return html
 
@@ -72,6 +74,7 @@ async def login_qr_page(request: Request):
         "request": request,
         "active_session": get_active_session(request),
         "all_sessions": list_sessions(),
+        "frontend_available": FRONTEND_AVAILABLE,
     })
     return html
 
