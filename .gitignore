@@ -41,6 +41,9 @@ ENV/
 .venv
 .venv_linux/
 
+# Frontend (Vite/React) — dist/ already covered by the unanchored dist/ rule above
+frontend/node_modules/
+
 # Archived/superseded code (kept locally, not tracked)
 6_messaging/_archived*/
 
