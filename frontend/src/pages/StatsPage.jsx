@@ -1,4 +1,13 @@
 import { useEffect, useState } from "react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+import StatTile from "../components/StatTile.jsx";
 
 function wsUrl(path) {
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -106,9 +115,68 @@ export default function StatsPage() {
       {error && <p className="text-red-400 text-sm mb-4">Error: {error}</p>}
 
       {result && (
-        <pre className="text-xs text-slate-400 bg-slate-900 p-3 rounded overflow-auto">
-          {JSON.stringify(result, null, 2)}
-        </pre>
+        <>
+          <div className="flex gap-3 mb-4">
+            <StatTile label="Total scanned" value={result.total_scanned} />
+            <StatTile label="Unique senders" value={result.unique_senders} />
+            <StatTile
+              label="Busiest hour"
+              value={
+                result.busiest_hour === null || result.busiest_hour === undefined
+                  ? "—"
+                  : `${String(result.busiest_hour).padStart(2, "0")}:00`
+              }
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-slate-900 border border-slate-800 rounded p-3">
+              <div className="text-slate-400 text-xs uppercase tracking-wide mb-2">
+                Top Users
+              </div>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart
+                  data={result.top_users.map(([name, count]) => ({ name, count }))}
+                  layout="vertical"
+                >
+                  <XAxis type="number" stroke="#64748b" fontSize={11} />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    stroke="#64748b"
+                    fontSize={11}
+                    width={90}
+                  />
+                  <Tooltip
+                    contentStyle={{ background: "#0f172a", border: "1px solid #1e293b" }}
+                  />
+                  <Bar dataKey="count" fill="#3b82f6" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded p-3">
+              <div className="text-slate-400 text-xs uppercase tracking-wide mb-2">
+                Peak Hours
+              </div>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart
+                  data={result.peak_hours.map(([hour, count]) => ({
+                    hour: `${String(hour).padStart(2, "0")}:00`,
+                    count,
+                  }))}
+                >
+                  <XAxis dataKey="hour" stroke="#64748b" fontSize={11} />
+                  <YAxis stroke="#64748b" fontSize={11} />
+                  <Tooltip
+                    contentStyle={{ background: "#0f172a", border: "1px solid #1e293b" }}
+                  />
+                  <Bar dataKey="count" fill="#3b82f6" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
