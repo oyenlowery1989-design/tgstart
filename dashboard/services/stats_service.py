@@ -19,6 +19,8 @@ class StatsResult:
     top_users: List[Tuple[str, int, float]]
     peak_hours: List[Tuple[int, int]]
     csv_path: str
+    unique_senders: int
+    busiest_hour: Optional[int]
 
 
 async def group_stats(session_name: str, group_id: int, limit: int = 2000,
@@ -56,8 +58,12 @@ async def group_stats(session_name: str, group_id: int, limit: int = 2000,
             ]
             peak_hours = sorted(hours.most_common(5))
 
+            busiest_hour = hours.most_common(1)[0][0] if hours else None
             csv_path = _save_csv(entity, total_scanned, user_msgs, user_names, hours)
-            return StatsResult(total_scanned=total_scanned, top_users=top_users, peak_hours=peak_hours, csv_path=csv_path)
+            return StatsResult(
+                total_scanned=total_scanned, top_users=top_users, peak_hours=peak_hours,
+                csv_path=csv_path, unique_senders=len(user_msgs), busiest_hour=busiest_hour,
+            )
         finally:
             await client.disconnect()
 
