@@ -84,3 +84,6 @@ desktop.ini
 # Logs
 *.log
 logs/
+
+# Brainstorming visual companion sessions
+.superpowers/
