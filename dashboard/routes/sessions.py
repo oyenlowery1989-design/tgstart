@@ -1,5 +1,5 @@
 """Sessions tab: listing/verification + active-session switcher. Login endpoints added in Tasks 4-5."""
-from fastapi import APIRouter, Request, Form, WebSocket
+from fastapi import APIRouter, HTTPException, Request, Form, WebSocket
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 from dashboard.state import list_sessions, get_active_session, ACTIVE_SESSION_COOKIE, FRONTEND_AVAILABLE
@@ -41,6 +41,8 @@ async def set_active_session(session_name: str = Form(...)):
 
 @router.post("/{session_name}/delete")
 async def delete_session_route(session_name: str):
+    if session_name not in list_sessions():
+        raise HTTPException(404, "No such session")
     await delete_session(session_name)
     return RedirectResponse(url="/sessions", status_code=303)
 
