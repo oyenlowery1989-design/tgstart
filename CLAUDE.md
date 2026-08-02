@@ -15,9 +15,9 @@ Root-level scripts and the web dashboard share one venv and `requirements.txt`
 ```bash
 python -m venv venv
 venv/bin/pip install -r requirements.txt   # or venv\Scripts\pip on Windows
+cd frontend && npm install && npm run build && cd ..  # builds the React pages (Stats, Bot Reply queue) — required once (and after frontend changes) before /app/stats or /app/reply work; dashboard/app.py falls back to the old /stats and /reply pages if this hasn't been run
 python dashboard/app.py                    # primary: web dashboard at http://127.0.0.1:8000
 python run.py                              # fallback: terminal menu, choice 0 to exit
-cd frontend && npm install && npm run build  # builds the React Stats page — required once (and after frontend changes) before /app/stats works; dashboard/app.py falls back to /stats if this hasn't been run
 ```
 
 `dashboard/app.py` is the primary, documented way to run the suite: it covers login,
