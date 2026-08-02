@@ -52,24 +52,26 @@ export function SessionsPage() {
   }, [refetch]);
 
   async function handleSwitch(sessionName: string) {
+    let msg: string | null = null;
     try {
       await postForm("/sessions/active", { session_name: sessionName });
-      setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      msg = e instanceof Error ? e.message : String(e);
     }
     await refetch();
+    if (msg) setError(msg);
   }
 
   async function handleDelete(name: string) {
     if (!window.confirm(`Delete session "${name}"?`)) return;
+    let msg: string | null = null;
     try {
       await postForm(`/sessions/${encodeURIComponent(name)}/delete`, {});
-      setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      msg = e instanceof Error ? e.message : String(e);
     }
     await refetch();
+    if (msg) setError(msg);
   }
 
   return (
@@ -100,6 +102,7 @@ export function SessionsPage() {
             className="border-input bg-background h-9 rounded-md border px-3 text-sm"
             value={data.active_session ?? ""}
             onChange={(e) => void handleSwitch(e.target.value)}
+            disabled={loading}
           >
             {data.all_sessions.map((name) => (
               <option key={name} value={name}>
@@ -138,6 +141,7 @@ export function SessionsPage() {
                   <Button
                     variant="destructive"
                     size="sm"
+                    disabled={loading}
                     onClick={() => void handleDelete(r.name)}
                   >
                     Delete
