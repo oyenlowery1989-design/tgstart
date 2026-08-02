@@ -65,8 +65,7 @@ async def _list_dialogs_marked(session_name: str):
     return rows
 
 
-@router.get("", response_class=HTMLResponse)
-async def reply_queue_page(request: Request):
+def _queue_data():
     conn = _conn()
     pending = bot_reply_db.list_pending_replies(conn, status="pending")
     approved = bot_reply_db.list_pending_replies(conn, status="approved")
@@ -78,12 +77,22 @@ async def reply_queue_page(request: Request):
     operator_user_id = os.getenv("BOT_REPLY_OPERATOR_USER_ID", "")
     configured = bool(session_name) and bool(bot_token) and bool(operator_user_id)
 
+    return {"configured": configured, "pending": pending, "approved": approved, "recent": recent}
+
+
+@router.get("", response_class=HTMLResponse)
+async def reply_queue_page(request: Request):
+    data = _queue_data()
     return _render_template("reply/index.html", {
-        "request": request, "pending": pending, "approved": approved, "recent": recent,
-        "configured": configured,
+        "request": request, **data,
         "active_session": get_active_session(request), "all_sessions": list_sessions(),
         "frontend_available": FRONTEND_AVAILABLE,
     })
+
+
+@router.get("/api/queue")
+async def api_queue():
+    return _queue_data()
 
 
 @router.get("/setup", response_class=HTMLResponse)
