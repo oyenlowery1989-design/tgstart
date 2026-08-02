@@ -116,6 +116,7 @@ export function StatsPage() {
       setError("WebSocket connection failed");
       setScanning(false);
     };
+    ws.onclose = () => setScanning(false);
   }
 
   const progressPct =
