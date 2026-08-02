@@ -4,11 +4,11 @@
 
 ## Context
 
-An earlier, now-superseded migration (before the shell rebuild) already built `dashboard/routes/stats.py`'s JSON API: `GET /stats/api/session` (returns `{active_session, all_sessions}`) and `WS /stats/api/ws` (accepts `{group_id, limit}`, streams `{current, total, message}` progress, finishes with `{done: true, top_users, peak_hours, total_scanned, unique_senders, busiest_hour}`). The shell rebuild (sub-project 1) deleted the old plain-JS frontend that consumed these endpoints, but never touched the backend — both endpoints are live and unchanged today, just currently unused.
+An earlier, now-superseded migration (before the shell rebuild) already built `dashboard/routes/stats.py`'s JSON API: `GET /api/stats/session` (returns `{active_session, all_sessions}`) and `WS /api/stats/ws` (accepts `{group_id, limit}`, streams `{current, total, message}` progress, finishes with `{done: true, top_users, peak_hours, total_scanned, unique_senders, busiest_hour}`). The shell rebuild (sub-project 1) deleted the old plain-JS frontend that consumed these endpoints, but never touched the backend — both endpoints are live and unchanged today, just currently unused.
 
 ## Architecture
 
-- No backend changes. Reuse `GET /stats/api/session` and `WS /stats/api/ws` exactly as-is.
+- No backend changes. Reuse `GET /api/stats/session` and `WS /api/stats/ws` exactly as-is.
 - One new frontend route: `/app/stats` (already exists as a nav item in `nav.ts` — same pattern as Sessions, filtered out of the generic `NotMigratedPage` mapping and given an explicit route).
 - Single page, no sub-routes (unlike Sessions) — no `findActiveNavItem` changes needed beyond what Sessions already added.
 - UI: form (group ID + limit inputs, Scan button) → WS-driven progress bar → on completion, 3 shadcn `Card` tiles (Total scanned / Unique senders / Busiest hour) + 2 Recharts bar charts (Top Users, Peak Hours) side by side.
