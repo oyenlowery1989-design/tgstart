@@ -15,7 +15,7 @@ Root-level scripts and the web dashboard share one venv and `requirements.txt`
 ```bash
 python -m venv venv
 venv/bin/pip install -r requirements.txt   # or venv\Scripts\pip on Windows
-cd frontend && npm install && npm run build && cd ..  # builds the React pages (Stats, Bot Reply queue) — required once (and after frontend changes) before /app/stats or /app/reply work; dashboard/app.py falls back to the old /stats and /reply pages if this hasn't been run
+cd frontend && npm install && npm run build && cd ..  # builds the new admin dashboard shell (TypeScript + shadcn/ui) — required once (and after frontend changes) before /app/* pages work; the old Jinja2 pages remain the working UI until each page is individually migrated
 python dashboard/app.py                    # primary: web dashboard at http://127.0.0.1:8000
 python run.py                              # fallback: terminal menu, choice 0 to exit
 ```
@@ -33,9 +33,9 @@ dashboard pair.
 `6_messaging/65/` no longer has its own venv — its dependencies were merged into the
 root `requirements.txt` and its `venv/` directory has been retired.
 
-There is no test suite, linter config, or CI in this repo — don't assume
-`pytest`/`ruff`/etc. exist. `python -m py_compile <file>` is the only verification
-available for a quick syntax check.
+There is no test suite or CI in this repo for the Python side — don't assume
+`pytest` exists. The frontend/ TypeScript project has `npm run lint` (oxlint)
+available; Python verification is still just `python -m py_compile <file>`.
 
 ## Architecture
 

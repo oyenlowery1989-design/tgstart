@@ -20,7 +20,10 @@ const router = createBrowserRouter(
         ...ALL_NAV_ITEMS.map((item) => ({
           path: item.url,
           element: (
-            <NotMigratedPage title={item.title} fallbackHref={item.url} />
+            <NotMigratedPage
+              title={item.title}
+              fallbackHref={item.fallbackHref ?? item.url}
+            />
           ),
         })),
         { path: "*", element: <Navigate to="/sessions" replace /> },
