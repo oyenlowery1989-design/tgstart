@@ -21,8 +21,11 @@ export default function ReplyPage() {
 
   const fetchQueue = useCallback(() => {
     fetch("/reply/api/queue")
-      .then((r) => r.json())
-      .then(setData)
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((d) => {
+        setData(d);
+        setError(null);
+      })
       .catch(() => setError("Failed to load queue."));
   }, []);
 
