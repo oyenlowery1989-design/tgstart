@@ -13,11 +13,11 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-import { ALL_NAV_ITEMS } from "@/lib/nav";
+import { findActiveNavItem } from "@/lib/nav-match";
 
 export function Layout() {
   const { pathname } = useLocation();
-  const current = ALL_NAV_ITEMS.find((item) => item.url === pathname);
+  const current = findActiveNavItem(pathname);
   return (
     <SidebarProvider>
       <AppSidebar />

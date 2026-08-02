@@ -10,6 +10,9 @@ import "./index.css";
 import { Layout } from "@/components/layout";
 import { NotMigratedPage } from "@/components/not-migrated-page";
 import { ALL_NAV_ITEMS } from "@/lib/nav";
+import { SessionsLoginPhonePage } from "@/pages/sessions-login-phone-page";
+import { SessionsLoginQrPage } from "@/pages/sessions-login-qr-page";
+import { SessionsPage } from "@/pages/sessions-page";
 
 const router = createBrowserRouter(
   [
@@ -17,15 +20,20 @@ const router = createBrowserRouter(
       element: <Layout />,
       children: [
         { index: true, element: <Navigate to="/sessions" replace /> },
-        ...ALL_NAV_ITEMS.map((item) => ({
-          path: item.url,
-          element: (
-            <NotMigratedPage
-              title={item.title}
-              fallbackHref={item.fallbackHref ?? item.url}
-            />
-          ),
-        })),
+        { path: "/sessions", element: <SessionsPage /> },
+        { path: "/sessions/login", element: <SessionsLoginPhonePage /> },
+        { path: "/sessions/login/qr", element: <SessionsLoginQrPage /> },
+        ...ALL_NAV_ITEMS.filter((item) => item.url !== "/sessions").map(
+          (item) => ({
+            path: item.url,
+            element: (
+              <NotMigratedPage
+                title={item.title}
+                fallbackHref={item.fallbackHref ?? item.url}
+              />
+            ),
+          }),
+        ),
         { path: "*", element: <Navigate to="/sessions" replace /> },
       ],
     },

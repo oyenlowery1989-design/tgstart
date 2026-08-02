@@ -12,9 +12,11 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 import { NAV_GROUPS } from "@/lib/nav";
+import { findActiveNavItem } from "@/lib/nav-match";
 
 export function AppSidebar() {
   const { pathname } = useLocation();
+  const activeItem = findActiveNavItem(pathname);
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -31,7 +33,7 @@ export function AppSidebar() {
                 <SidebarMenuItem key={item.url}>
                   <SidebarMenuButton
                     render={<Link to={item.url} />}
-                    isActive={pathname === item.url}
+                    isActive={activeItem?.url === item.url}
                     tooltip={item.title}
                   >
                     <item.icon />
