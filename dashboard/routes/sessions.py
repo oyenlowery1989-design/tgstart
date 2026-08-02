@@ -19,17 +19,27 @@ from dashboard.ws_utils import ws_session
 router = APIRouter(prefix="/sessions")
 
 
-@router.get("", response_class=HTMLResponse)
-async def sessions_page(request: Request):
-    results = await check_all_sessions()
-    html = _render_template("sessions.html", {
-        "request": request,
-        "results": results,
+async def _list_data(request: Request) -> dict:
+    return {
+        "results": await check_all_sessions(),
         "active_session": get_active_session(request),
         "all_sessions": list_sessions(),
+    }
+
+
+@router.get("", response_class=HTMLResponse)
+async def sessions_page(request: Request):
+    data = await _list_data(request)
+    html = _render_template("sessions.html", {
+        "request": request, **data,
         "frontend_available": FRONTEND_AVAILABLE,
     })
     return html
+
+
+@router.get("/api/list")
+async def api_list(request: Request):
+    return await _list_data(request)
 
 
 @router.post("/active")
