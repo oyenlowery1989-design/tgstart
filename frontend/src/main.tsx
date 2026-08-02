@@ -13,6 +13,9 @@ import { ALL_NAV_ITEMS } from "@/lib/nav";
 import { SessionsLoginPhonePage } from "@/pages/sessions-login-phone-page";
 import { SessionsLoginQrPage } from "@/pages/sessions-login-qr-page";
 import { SessionsPage } from "@/pages/sessions-page";
+import { StatsPage } from "@/pages/stats-page";
+
+const MIGRATED_URLS = ["/sessions", "/stats"];
 
 const router = createBrowserRouter(
   [
@@ -23,17 +26,18 @@ const router = createBrowserRouter(
         { path: "/sessions", element: <SessionsPage /> },
         { path: "/sessions/login", element: <SessionsLoginPhonePage /> },
         { path: "/sessions/login/qr", element: <SessionsLoginQrPage /> },
-        ...ALL_NAV_ITEMS.filter((item) => item.url !== "/sessions").map(
-          (item) => ({
-            path: item.url,
-            element: (
-              <NotMigratedPage
-                title={item.title}
-                fallbackHref={item.fallbackHref ?? item.url}
-              />
-            ),
-          }),
-        ),
+        { path: "/stats", element: <StatsPage /> },
+        ...ALL_NAV_ITEMS.filter(
+          (item) => !MIGRATED_URLS.includes(item.url),
+        ).map((item) => ({
+          path: item.url,
+          element: (
+            <NotMigratedPage
+              title={item.title}
+              fallbackHref={item.fallbackHref ?? item.url}
+            />
+          ),
+        })),
         { path: "*", element: <Navigate to="/sessions" replace /> },
       ],
     },
