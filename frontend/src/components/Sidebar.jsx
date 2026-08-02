@@ -16,7 +16,7 @@ const NAV_GROUPS = [
     label: "Automation",
     items: [
       { label: "Ghost Mirror", href: "/ghost", external: true },
-      { label: "Bot Reply", href: "/reply", external: true },
+      { label: "Bot Reply", href: "/app/reply", external: false },
     ],
   },
 ];

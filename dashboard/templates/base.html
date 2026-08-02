@@ -17,7 +17,7 @@
       <a href="/scrape">Scraping</a>
       <a href="{% if frontend_available %}/app/stats{% else %}/stats{% endif %}">Stats</a>
       <a href="/ghost">Ghost Mirror</a>
-      <a href="/reply">Bot Reply</a>
+      <a href="{% if frontend_available %}/app/reply{% else %}/reply{% endif %}">Bot Reply</a>
       <a href="/utilities/participation">Utilities</a>
     </div>
 
