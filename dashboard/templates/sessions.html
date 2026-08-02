@@ -3,16 +3,32 @@
 {% block content %}
 <h1>Sessions</h1>
 <table>
-  <thead><tr><th>Name</th><th>Status</th><th>Details</th></tr></thead>
+  <thead><tr><th>Name</th><th>Status</th><th>Details</th><th></th></tr></thead>
   <tbody>
     {% for r in results %}
     <tr>
       <td>{{ r.name }}</td>
       <td>{{ r.status }}</td>
       <td>{{ r.details }}</td>
+      <td>
+        <form method="post" action="/sessions/{{ r.name }}/delete" class="delete-session-form">
+          <button type="submit">Delete</button>
+        </form>
+      </td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
 <p><a href="/sessions/login">+ Add account (phone)</a> | <a href="/sessions/login/qr">+ Add account (QR)</a></p>
+{% endblock %}
+{% block scripts %}
+<script>
+  document.querySelectorAll(".delete-session-form").forEach((form) => {
+    form.addEventListener("submit", (evt) => {
+      if (!confirm("Delete this session? This can't be undone.")) {
+        evt.preventDefault();
+      }
+    });
+  });
+</script>
 {% endblock %}

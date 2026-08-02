@@ -9,7 +9,7 @@ from typing import Awaitable, Callable, Dict, List, Optional
 from telethon import TelegramClient, errors
 
 from dashboard.state import list_sessions, session_path, SESSIONS_DIR
-from dashboard.tg_client import API_ID, API_HASH
+from dashboard.tg_client import API_ID, API_HASH, session_lock
 
 ProgressCB = Callable[[int, int, str], Awaitable[None]]
 
@@ -210,10 +210,21 @@ async def submit_qr_2fa(flow_id: str, password: str) -> Dict[str, str]:
     return {"status": "done", "session_name": session_name}
 
 
+async def delete_session(session_name: str) -> None:
+    """Removes the local .session file only — does not revoke the login on
+    Telegram's side. Acquires the same per-session lock used by scrape/scan
+    operations so a delete can't race a live client using the file."""
+    async with session_lock(session_name):
+        base = Path(session_path(session_name))
+        base.with_suffix(".session").unlink(missing_ok=True)
+        base.with_suffix(".session-journal").unlink(missing_ok=True)
+
+
 if __name__ == "__main__":
     import asyncio
     import inspect
     assert inspect.iscoroutinefunction(check_session)
     assert inspect.iscoroutinefunction(check_all_sessions)
+    assert inspect.iscoroutinefunction(delete_session)
     result = asyncio.run(check_all_sessions())
     print("sessions_service.py smoke check OK:", result)

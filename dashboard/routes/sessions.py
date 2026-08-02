@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from dashboard.state import list_sessions, get_active_session, ACTIVE_SESSION_COOKIE, FRONTEND_AVAILABLE
 from dashboard.services.sessions_service import (
     check_all_sessions,
+    delete_session,
     start_phone_login,
     submit_code,
     submit_2fa,
@@ -36,6 +37,12 @@ async def set_active_session(session_name: str = Form(...)):
     resp = RedirectResponse(url="/sessions", status_code=303)
     resp.set_cookie(ACTIVE_SESSION_COOKIE, session_name)
     return resp
+
+
+@router.post("/{session_name}/delete")
+async def delete_session_route(session_name: str):
+    await delete_session(session_name)
+    return RedirectResponse(url="/sessions", status_code=303)
 
 
 # --- Phone login routes ---
