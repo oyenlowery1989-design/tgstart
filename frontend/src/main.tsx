@@ -11,6 +11,11 @@ import { Layout } from "@/components/layout";
 import { NotMigratedPage } from "@/components/not-migrated-page";
 import { ALL_NAV_ITEMS } from "@/lib/nav";
 import { ChatsPage } from "@/pages/chats-page";
+import { GhostChatsPage } from "@/pages/ghost-chats-page";
+import { GhostEventsPage } from "@/pages/ghost-events-page";
+import { GhostHomePage } from "@/pages/ghost-home-page";
+import { GhostSetupPage } from "@/pages/ghost-setup-page";
+import { GhostUsersPage } from "@/pages/ghost-users-page";
 import { GroupUsersPage } from "@/pages/group-users-page";
 import { ReplyPage } from "@/pages/reply-page";
 import { ScrapePage } from "@/pages/scrape-page";
@@ -19,7 +24,10 @@ import { SessionsLoginQrPage } from "@/pages/sessions-login-qr-page";
 import { SessionsPage } from "@/pages/sessions-page";
 import { StatsPage } from "@/pages/stats-page";
 
-const MIGRATED_URLS = ["/sessions", "/stats", "/reply", "/chats", "/scrape"];
+// Only bare nav-item URLs belong here (the array excludes nav items from the
+// NotMigratedPage mapping); sub-routes like /ghost/chats are separate router
+// entries reached via links, same as /groups/:groupId/users.
+const MIGRATED_URLS = ["/sessions", "/stats", "/reply", "/chats", "/scrape", "/ghost"];
 
 const router = createBrowserRouter(
   [
@@ -35,6 +43,11 @@ const router = createBrowserRouter(
         { path: "/groups/:groupId/users", element: <GroupUsersPage /> },
         { path: "/scrape", element: <ScrapePage /> },
         { path: "/reply", element: <ReplyPage /> },
+        { path: "/ghost", element: <GhostHomePage /> },
+        { path: "/ghost/chats", element: <GhostChatsPage /> },
+        { path: "/ghost/setup", element: <GhostSetupPage /> },
+        { path: "/ghost/events", element: <GhostEventsPage /> },
+        { path: "/ghost/users", element: <GhostUsersPage /> },
         ...ALL_NAV_ITEMS.filter(
           (item) => !MIGRATED_URLS.includes(item.url),
         ).map((item) => ({
