@@ -205,3 +205,98 @@ async def api_chat_mapping(payload: dict):
     execute_query("INSERT OR IGNORE INTO config (chat_id) VALUES (?)", (chat_id,), commit=True)
     bump_config()
     return {"status": "ok"}
+
+
+# --- JSON API for the React frontend (additive; Jinja2 routes above unchanged) ---
+
+@router.get("/api/home")
+async def api_home():
+    monitored = execute_query("SELECT COUNT(*) as c FROM chats WHERE monitored=1", fetchone=True)
+    msgs = execute_query("SELECT COUNT(*) as c FROM messages", fetchone=True)
+    events = execute_query("SELECT COUNT(*) as c FROM events", fetchone=True)
+    failures = execute_query("""
+        SELECT * FROM events
+        WHERE event_type IN ('mirror_failed_total', 'mirror_fallback_copy')
+        ORDER BY ts DESC LIMIT 5
+    """, fetchall=True)
+    recent_events = execute_query("SELECT * FROM events ORDER BY ts DESC LIMIT 10", fetchall=True)
+    bump = execute_query("SELECT value FROM config_meta WHERE key='config_bump'", fetchone=True)
+    return {
+        "monitored_count": monitored['c'] if monitored else 0,
+        "message_count": msgs['c'] if msgs else 0,
+        "event_count": events['c'] if events else 0,
+        "failures": failures,
+        "recent_events": recent_events,
+        "config_bump": bump['value'] if bump else "0",
+        "schema_version": "3",
+    }
+
+
+@router.get("/api/chats")
+async def api_chats(page: int = 1):
+    limit = 20
+    offset = (page - 1) * limit
+    total = execute_query("SELECT COUNT(*) as c FROM chats", fetchone=True)['c']
+    query = """
+        SELECT c.*,
+               cfg.toggle_mirror_new, cfg.toggle_log_new,
+               cfg.toggle_edits, cfg.toggle_deletes, cfg.toggle_joins,
+               cfg.toggle_admin, cfg.toggle_restrict, cfg.toggle_invites, cfg.toggle_bots, cfg.toggle_bio_worker,
+               cfg.toggle_reactions
+        FROM chats c
+        LEFT JOIN config cfg ON c.chat_id = cfg.chat_id
+        ORDER BY c.title ASC
+        LIMIT ? OFFSET ?
+    """
+    chats = execute_query(query, (limit, offset), fetchall=True)
+    total_pages = (total // limit) + 1
+    return {"chats": chats, "page": page, "total_pages": total_pages, "total_chats": total}
+
+
+@router.get("/api/setup")
+async def api_setup(q: str = ""):
+    where = ""
+    params = []
+    if q:
+        where = "WHERE title LIKE ? OR chat_id LIKE ?"
+        wild = f"%{q}%"
+        params = [wild, wild]
+    chats = execute_query(f"SELECT * FROM chats {where} ORDER BY monitored DESC, title ASC", tuple(params), fetchall=True)
+    destinations = execute_query(
+        "SELECT chat_id, title FROM chats WHERE type IN ('channel', 'supergroup', 'group') ORDER BY title ASC",
+        fetchall=True,
+    )
+    return {"chats": chats, "destinations": destinations, "query": q}
+
+
+@router.get("/api/events")
+async def api_events(page: int = 1, type: str = ""):
+    limit = 50
+    offset = (page - 1) * limit
+    params = []
+    where_clause = ""
+    if type:
+        where_clause = "WHERE event_type = ?"
+        params.append(type)
+    total = execute_query(f"SELECT COUNT(*) as c FROM events {where_clause}", tuple(params), fetchone=True)['c']
+    params.extend([limit, offset])
+    events = execute_query(f"SELECT * FROM events {where_clause} ORDER BY ts DESC LIMIT ? OFFSET ?", tuple(params), fetchall=True)
+    total_pages = max((total // limit) + 1, 1)
+    return {"events": events, "page": page, "total_pages": total_pages, "total_events": total, "type_filter": type}
+
+
+@router.get("/api/users")
+async def api_users(page: int = 1, q: str = ""):
+    limit = 50
+    offset = (page - 1) * limit
+    where = ""
+    params = []
+    if q:
+        where = "WHERE username LIKE ? OR first_name LIKE ? OR user_id = ?"
+        wild = f"%{q}%"
+        params = [wild, wild, q if q.isdigit() else -1]
+    total = execute_query(f"SELECT COUNT(*) as c FROM users {where}", tuple(params), fetchone=True)['c']
+    params.extend([limit, offset])
+    users = execute_query(f"SELECT * FROM users {where} ORDER BY last_seen DESC LIMIT ? OFFSET ?", tuple(params), fetchall=True)
+    total_pages = (total // limit) + 1
+    return {"users": users, "page": page, "total_pages": total_pages, "total_users": total, "query": q}
