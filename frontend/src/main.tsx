@@ -10,13 +10,14 @@ import "./index.css";
 import { Layout } from "@/components/layout";
 import { NotMigratedPage } from "@/components/not-migrated-page";
 import { ALL_NAV_ITEMS } from "@/lib/nav";
+import { ChatsPage } from "@/pages/chats-page";
 import { ReplyPage } from "@/pages/reply-page";
 import { SessionsLoginPhonePage } from "@/pages/sessions-login-phone-page";
 import { SessionsLoginQrPage } from "@/pages/sessions-login-qr-page";
 import { SessionsPage } from "@/pages/sessions-page";
 import { StatsPage } from "@/pages/stats-page";
 
-const MIGRATED_URLS = ["/sessions", "/stats", "/reply"];
+const MIGRATED_URLS = ["/sessions", "/stats", "/reply", "/chats"];
 
 const router = createBrowserRouter(
   [
@@ -28,6 +29,7 @@ const router = createBrowserRouter(
         { path: "/sessions/login", element: <SessionsLoginPhonePage /> },
         { path: "/sessions/login/qr", element: <SessionsLoginQrPage /> },
         { path: "/stats", element: <StatsPage /> },
+        { path: "/chats", element: <ChatsPage /> },
         { path: "/reply", element: <ReplyPage /> },
         ...ALL_NAV_ITEMS.filter(
           (item) => !MIGRATED_URLS.includes(item.url),
