@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -78,6 +79,7 @@ export function ChatsPage() {
               <TableHead>Name</TableHead>
               <TableHead>ID</TableHead>
               <TableHead>Username</TableHead>
+              <TableHead />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -89,11 +91,22 @@ export function ChatsPage() {
                   {r.id}
                 </TableCell>
                 <TableCell>{r.username ?? ""}</TableCell>
+                <TableCell>
+                  {(r.type === "GROUP" || r.type === "CHANNEL") && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      render={<Link to={`/groups/${r.id}/users`} />}
+                    >
+                      View users
+                    </Button>
+                  )}
+                </TableCell>
               </TableRow>
             ))}
             {data.rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="text-muted-foreground">
+                <TableCell colSpan={5} className="text-muted-foreground">
                   No dialogs found.
                 </TableCell>
               </TableRow>
