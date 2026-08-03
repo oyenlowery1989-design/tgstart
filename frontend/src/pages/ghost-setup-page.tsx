@@ -72,6 +72,7 @@ function SetupRow({
       <TableCell className="text-center">
         <Switch
           checked={monitored}
+          aria-label={`Monitor for ${chat.title ?? chat.chat_id}`}
           onCheckedChange={(checked) => setMonitored(checked)}
         />
       </TableCell>

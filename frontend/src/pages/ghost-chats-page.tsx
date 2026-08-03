@@ -44,7 +44,10 @@ const ADVANCED_TOGGLES: { key: ToggleKey; label: string }[] = [
 
 export function GhostChatsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const page = Math.max(1, Number(searchParams.get("page") ?? "1") || 1);
+  const page = Math.max(
+    1,
+    Math.floor(Number(searchParams.get("page") ?? "1") || 1),
+  );
   const [data, setData] = useState<ChatsData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -83,8 +86,8 @@ export function GhostChatsPage() {
     try {
       await toggleConfig(chatId, key, value);
     } catch (e) {
+      await load();
       setError(e instanceof Error ? e.message : String(e));
-      void load();
     }
   }
 
@@ -93,8 +96,8 @@ export function GhostChatsPage() {
     try {
       await toggleMonitor(chatId, value);
     } catch (e) {
+      await load();
       setError(e instanceof Error ? e.message : String(e));
-      void load();
     }
   }
 
@@ -160,6 +163,7 @@ export function GhostChatsPage() {
                     <TableCell>
                       <Switch
                         checked={c.monitored === 1}
+                        aria-label={`Monitor for ${c.title ?? c.chat_id}`}
                         onCheckedChange={(checked) =>
                           void handleMonitor(c.chat_id, checked)
                         }
@@ -177,6 +181,7 @@ export function GhostChatsPage() {
                       <TableCell key={t.key}>
                         <Switch
                           checked={!!c[t.key]}
+                          aria-label={`${t.label} for ${c.title ?? c.chat_id}`}
                           onCheckedChange={(checked) =>
                             void handleConfig(c.chat_id, t.key, checked)
                           }

@@ -35,7 +35,10 @@ const EVENT_TYPES = [
 
 export function GhostEventsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const page = Math.max(1, Number(searchParams.get("page") ?? "1") || 1);
+  const page = Math.max(
+    1,
+    Math.floor(Number(searchParams.get("page") ?? "1") || 1),
+  );
   const typeFilter = searchParams.get("type") ?? "";
   const [data, setData] = useState<EventsData | null>(null);
   const [error, setError] = useState<string | null>(null);

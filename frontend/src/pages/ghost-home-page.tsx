@@ -62,6 +62,7 @@ export function GhostHomePage() {
   const loaded = data !== null;
   useEffect(() => {
     if (!loaded) return;
+    let cancelled = false;
     const id = setInterval(() => {
       fetchRecentEvents(lastTsRef.current)
         .then(({ events }) => {
@@ -75,6 +76,7 @@ export function GhostHomePage() {
           const ids = events.map((e) => e.event_id);
           setFreshIds((prev) => new Set([...prev, ...ids]));
           setTimeout(() => {
+            if (cancelled) return;
             setFreshIds((prev) => {
               const next = new Set(prev);
               for (const eventId of ids) next.delete(eventId);
@@ -86,7 +88,10 @@ export function GhostHomePage() {
           // Classic behavior: poll errors are ignored; next tick retries.
         });
     }, POLL_INTERVAL_MS);
-    return () => clearInterval(id);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, [loaded]);
 
   if (error) {

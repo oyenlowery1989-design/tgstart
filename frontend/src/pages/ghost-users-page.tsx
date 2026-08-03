@@ -19,7 +19,10 @@ import { fetchUsers, type UsersData } from "@/lib/ghost-api";
 
 export function GhostUsersPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const page = Math.max(1, Number(searchParams.get("page") ?? "1") || 1);
+  const page = Math.max(
+    1,
+    Math.floor(Number(searchParams.get("page") ?? "1") || 1),
+  );
   const q = searchParams.get("q") ?? "";
   const [qInput, setQInput] = useState(q);
   const [data, setData] = useState<UsersData | null>(null);
