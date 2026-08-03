@@ -10,6 +10,11 @@ from dashboard.ws_utils import ws_session
 router = APIRouter(prefix="/scrape")
 
 
+@router.get("/api/session")
+async def api_session(request: Request):
+    return {"active_session": get_active_session(request), "all_sessions": list_sessions()}
+
+
 @router.get("", response_class=HTMLResponse)
 async def scrape_page(request: Request):
     return _render_template("scrape.html", {

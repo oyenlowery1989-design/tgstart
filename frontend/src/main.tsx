@@ -13,12 +13,13 @@ import { ALL_NAV_ITEMS } from "@/lib/nav";
 import { ChatsPage } from "@/pages/chats-page";
 import { GroupUsersPage } from "@/pages/group-users-page";
 import { ReplyPage } from "@/pages/reply-page";
+import { ScrapePage } from "@/pages/scrape-page";
 import { SessionsLoginPhonePage } from "@/pages/sessions-login-phone-page";
 import { SessionsLoginQrPage } from "@/pages/sessions-login-qr-page";
 import { SessionsPage } from "@/pages/sessions-page";
 import { StatsPage } from "@/pages/stats-page";
 
-const MIGRATED_URLS = ["/sessions", "/stats", "/reply", "/chats"];
+const MIGRATED_URLS = ["/sessions", "/stats", "/reply", "/chats", "/scrape"];
 
 const router = createBrowserRouter(
   [
@@ -32,6 +33,7 @@ const router = createBrowserRouter(
         { path: "/stats", element: <StatsPage /> },
         { path: "/chats", element: <ChatsPage /> },
         { path: "/groups/:groupId/users", element: <GroupUsersPage /> },
+        { path: "/scrape", element: <ScrapePage /> },
         { path: "/reply", element: <ReplyPage /> },
         ...ALL_NAV_ITEMS.filter(
           (item) => !MIGRATED_URLS.includes(item.url),
