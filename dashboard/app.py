@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 from dashboard.auth import require_auth, DASHBOARD_PASSWORD
+from dashboard.csrf import COOKIE_NAME as CSRF_COOKIE_NAME, new_token as new_csrf_token
 from dashboard.ghost_process import start_ghost_bot, stop_ghost_bot
 from dashboard.bot_reply_process import start_bot_reply, stop_bot_reply
 from dashboard.state import FRONTEND_DIST, FRONTEND_AVAILABLE
@@ -31,6 +32,17 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Telegram Suite Dashboard", dependencies=[Depends(require_auth)], lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
+
+
+@app.middleware("http")
+async def ensure_csrf_cookie(request, call_next):
+    """Guarantees every browser tab has a CSRF token before it can submit
+    anything — pages read it back via `document.cookie` (fetch header) or a
+    hidden form field, see dashboard/csrf.py."""
+    response = await call_next(request)
+    if CSRF_COOKIE_NAME not in request.cookies:
+        response.set_cookie(CSRF_COOKIE_NAME, new_csrf_token(), samesite="strict", httponly=False)
+    return response
 
 from dashboard.routes import ghost_mirror, sessions, chats, groups, scrape, stats, utilities, bot_reply
 app.include_router(ghost_mirror.router)

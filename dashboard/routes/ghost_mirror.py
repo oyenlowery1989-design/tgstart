@@ -3,9 +3,10 @@ import datetime
 import sqlite3
 from pathlib import Path
 
-from fastapi import APIRouter, Request, HTTPException, Query
+from fastapi import APIRouter, Depends, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse
 
+from dashboard.csrf import require_csrf_header
 from dashboard.templates_env import render_template as _render_template
 
 DB_PATH = Path(__file__).resolve().parent.parent.parent / "6_messaging" / "65" / "data" / "ghost.db"
@@ -136,7 +137,7 @@ async def users_list(request: Request, page: int = 1, q: str = ""):
     return html
 
 
-@router.post("/api/toggle/{chat_id}/{key}")
+@router.post("/api/toggle/{chat_id}/{key}", dependencies=[Depends(require_csrf_header)])
 async def api_toggle(chat_id: int, key: str, value: int = Query(...)):
     valid_keys = [
         "toggle_mirror_new", "toggle_log_new", "toggle_edits", "toggle_deletes", "toggle_joins",
@@ -151,7 +152,7 @@ async def api_toggle(chat_id: int, key: str, value: int = Query(...)):
     return {"status": "ok", "new_value": value}
 
 
-@router.post("/api/chats/{chat_id}/monitor")
+@router.post("/api/chats/{chat_id}/monitor", dependencies=[Depends(require_csrf_header)])
 async def api_monitor(chat_id: int, value: int = Query(...)):
     execute_query("UPDATE chats SET monitored = ? WHERE chat_id = ?", (value, chat_id), commit=True)
     bump_config()
@@ -191,7 +192,7 @@ async def setup_page(request: Request, q: str = ""):
     return html
 
 
-@router.post("/api/chat_mapping")
+@router.post("/api/chat_mapping", dependencies=[Depends(require_csrf_header)])
 async def api_chat_mapping(payload: dict):
     chat_id = payload.get("chat_id")
     monitored = 1 if payload.get("monitored") else 0

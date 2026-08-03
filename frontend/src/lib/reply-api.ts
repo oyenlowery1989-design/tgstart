@@ -1,6 +1,8 @@
 // Shared helpers for the Bot Reply queue page. Backend endpoints live under
 // /reply (no /app prefix — that's only the SPA router basename).
 
+import { csrfToken } from "@/lib/csrf";
+
 /**
  * Deliberate narrowing, not a mismatch: the backend returns every column of
  * the pending_replies table on every row (chat_id, source_message_id,
@@ -45,5 +47,8 @@ export async function resolvePending(
   id: number,
   action: ResolveAction,
 ): Promise<Response> {
-  return fetch(`/reply/api/pending/${id}/${action}`, { method: "POST" });
+  return fetch(`/reply/api/pending/${id}/${action}`, {
+    method: "POST",
+    headers: { "X-CSRF-Token": csrfToken() },
+  });
 }

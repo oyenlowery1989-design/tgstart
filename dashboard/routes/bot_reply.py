@@ -3,10 +3,12 @@ import os
 import sys
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from telethon.tl.types import Channel, Chat, User
 from telethon.utils import get_peer_id
+
+from dashboard.csrf import require_csrf_header
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 BOT_REPLY_DIR = ROOT_DIR / "6_messaging" / "bot_reply"
@@ -139,7 +141,7 @@ async def reply_setup_page(request: Request):
     })
 
 
-@router.post("/api/chat/{chat_id}/enable")
+@router.post("/api/chat/{chat_id}/enable", dependencies=[Depends(require_csrf_header)])
 async def api_enable_chat(chat_id: int, payload: dict):
     conn = _conn()
     title = payload.get("title", str(chat_id))
@@ -148,7 +150,7 @@ async def api_enable_chat(chat_id: int, payload: dict):
     return {"status": "ok", "enabled": bool(enabled)}
 
 
-@router.post("/api/chat/{chat_id}/trigger_mode")
+@router.post("/api/chat/{chat_id}/trigger_mode", dependencies=[Depends(require_csrf_header)])
 async def api_set_trigger_mode(chat_id: int, payload: dict):
     mode = payload.get("trigger_mode")
     if mode not in (None, "always", "mentions", "off"):
@@ -159,7 +161,7 @@ async def api_set_trigger_mode(chat_id: int, payload: dict):
     return {"status": "ok", "trigger_mode": mode}
 
 
-@router.post("/api/settings")
+@router.post("/api/settings", dependencies=[Depends(require_csrf_header)])
 async def api_update_settings(payload: dict):
     conn = _conn()
     allowed_keys = {
@@ -173,7 +175,7 @@ async def api_update_settings(payload: dict):
     return {"status": "ok"}
 
 
-@router.post("/api/pending/{reply_id}/approve")
+@router.post("/api/pending/{reply_id}/approve", dependencies=[Depends(require_csrf_header)])
 async def api_approve(reply_id: int):
     conn = _conn()
     row = bot_reply_db.get_pending_reply(conn, reply_id)
@@ -185,7 +187,7 @@ async def api_approve(reply_id: int):
     return {"status": "approved"}
 
 
-@router.post("/api/pending/{reply_id}/reject")
+@router.post("/api/pending/{reply_id}/reject", dependencies=[Depends(require_csrf_header)])
 async def api_reject(reply_id: int):
     conn = _conn()
     row = bot_reply_db.get_pending_reply(conn, reply_id)
@@ -197,7 +199,7 @@ async def api_reject(reply_id: int):
     return {"status": "rejected"}
 
 
-@router.post("/api/pending/{reply_id}/retry")
+@router.post("/api/pending/{reply_id}/retry", dependencies=[Depends(require_csrf_header)])
 async def api_retry(reply_id: int):
     conn = _conn()
     row = bot_reply_db.get_pending_reply(conn, reply_id)

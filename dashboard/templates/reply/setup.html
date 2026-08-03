@@ -82,7 +82,7 @@
     const data = Object.fromEntries(new FormData(evt.target).entries());
     const resp = await fetch("/reply/api/settings", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": getCsrfToken() },
       body: JSON.stringify(data),
     });
     document.getElementById("settings-status").textContent = resp.ok ? "Saved." : "Error: " + resp.status;
@@ -92,7 +92,7 @@
     el.addEventListener("change", async () => {
       await fetch(`/reply/api/chat/${el.dataset.chatId}/enable`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": getCsrfToken() },
         body: JSON.stringify({ title: el.dataset.name, enabled: el.checked }),
       });
     });
@@ -102,7 +102,7 @@
     el.addEventListener("change", async () => {
       await fetch(`/reply/api/chat/${el.dataset.chatId}/trigger_mode`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": getCsrfToken() },
         body: JSON.stringify({ title: el.dataset.name, trigger_mode: el.value || null }),
       });
     });

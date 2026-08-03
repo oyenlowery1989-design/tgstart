@@ -1,7 +1,8 @@
 """Sessions tab: listing/verification + active-session switcher. Login endpoints added in Tasks 4-5."""
-from fastapi import APIRouter, HTTPException, Request, Form, WebSocket
+from fastapi import APIRouter, Depends, HTTPException, Request, Form, WebSocket
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
+from dashboard.csrf import require_csrf_form
 from dashboard.state import list_sessions, get_active_session, ACTIVE_SESSION_COOKIE, FRONTEND_AVAILABLE
 from dashboard.services.sessions_service import (
     check_all_sessions,
@@ -42,14 +43,14 @@ async def api_list(request: Request):
     return await _list_data(request)
 
 
-@router.post("/active")
+@router.post("/active", dependencies=[Depends(require_csrf_form)])
 async def set_active_session(session_name: str = Form(...)):
     resp = RedirectResponse(url="/sessions", status_code=303)
     resp.set_cookie(ACTIVE_SESSION_COOKIE, session_name)
     return resp
 
 
-@router.post("/{session_name}/delete")
+@router.post("/{session_name}/delete", dependencies=[Depends(require_csrf_form)])
 async def delete_session_route(session_name: str):
     if session_name not in list_sessions():
         raise HTTPException(404, "No such session")
@@ -70,17 +71,17 @@ async def login_phone_page(request: Request):
     return html
 
 
-@router.post("/login/phone")
+@router.post("/login/phone", dependencies=[Depends(require_csrf_form)])
 async def login_phone_submit(phone: str = Form(...)):
     return JSONResponse(await start_phone_login(phone))
 
 
-@router.post("/login/code")
+@router.post("/login/code", dependencies=[Depends(require_csrf_form)])
 async def login_code_submit(flow_id: str = Form(...), code: str = Form(...)):
     return JSONResponse(await submit_code(flow_id, code))
 
 
-@router.post("/login/2fa")
+@router.post("/login/2fa", dependencies=[Depends(require_csrf_form)])
 async def login_2fa_submit(flow_id: str = Form(...), password: str = Form(...)):
     return JSONResponse(await submit_2fa(flow_id, password))
 

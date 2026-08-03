@@ -84,7 +84,7 @@ async function saveMapping(chatId) {
     try {
         const response = await fetch('/ghost/api/chat_mapping', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCsrfToken() },
             body: JSON.stringify({
                 chat_id: parseInt(chatId),
                 monitored: monitored,

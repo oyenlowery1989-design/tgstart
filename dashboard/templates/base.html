@@ -22,8 +22,9 @@
     </div>
 
     <form class="session-switcher" method="post" action="/sessions/active">
+      <input type="hidden" name="csrf_token" />
       <label>Active session:
-        <select name="session_name" onchange="this.form.submit()">
+        <select name="session_name" onchange="this.form.csrf_token.value=getCsrfToken(); this.form.submit()">
           {% for s in all_sessions %}
           <option value="{{ s }}" {% if s == active_session %}selected{% endif %}>{{ s }}</option>
           {% endfor %}
@@ -34,6 +35,10 @@
     <div class="container">{% block content %}{% endblock %}</div>
 
     <script>
+      function getCsrfToken() {
+        return document.cookie.match(/(?:^|; )csrf_token=([^;]*)/)?.[1] ?? "";
+      }
+
       function openProgressSocket(path, onMessage) {
         const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
         const ws = new WebSocket(`${proto}//${window.location.host}${path}`);

@@ -87,7 +87,10 @@
 <script>
   async function resolve(id, action) {
     const statusEl = document.getElementById("status-" + id);
-    const resp = await fetch(`/reply/api/pending/${id}/${action}`, { method: "POST" });
+    const resp = await fetch(`/reply/api/pending/${id}/${action}`, {
+      method: "POST",
+      headers: { "X-CSRF-Token": getCsrfToken() },
+    });
     if (resp.status === 409) {
       const data = await resp.json();
       statusEl.textContent = "Already resolved: " + (data.detail || "");
@@ -101,7 +104,10 @@
   }
 
   async function retryReply(id) {
-    const resp = await fetch(`/reply/api/pending/${id}/retry`, { method: "POST" });
+    const resp = await fetch(`/reply/api/pending/${id}/retry`, {
+      method: "POST",
+      headers: { "X-CSRF-Token": getCsrfToken() },
+    });
     if (!resp.ok) {
       alert("Retry failed: " + resp.status);
       return;

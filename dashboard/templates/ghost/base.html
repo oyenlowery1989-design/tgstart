@@ -24,9 +24,16 @@
     <div class="container">{% block content %}{% endblock %}</div>
 
     <script>
+      function getCsrfToken() {
+        return document.cookie.match(/(?:^|; )csrf_token=([^;]*)/)?.[1] ?? "";
+      }
+
       async function fetchPost(url) {
         try {
-          const response = await fetch(url, { method: "POST" });
+          const response = await fetch(url, {
+            method: "POST",
+            headers: { "X-CSRF-Token": getCsrfToken() },
+          });
           if (!response.ok) {
             alert("Action failed: " + response.statusText);
             return false;

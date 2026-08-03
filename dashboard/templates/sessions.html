@@ -12,6 +12,7 @@
       <td>{{ r.details }}</td>
       <td>
         <form method="post" action="/sessions/{{ r.name }}/delete" class="delete-session-form">
+          <input type="hidden" name="csrf_token" />
           <button type="submit">Delete</button>
         </form>
       </td>
@@ -27,7 +28,9 @@
     form.addEventListener("submit", (evt) => {
       if (!confirm("Delete this session? This can't be undone.")) {
         evt.preventDefault();
+        return;
       }
+      form.csrf_token.value = getCsrfToken();
     });
   });
 </script>
