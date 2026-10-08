@@ -5,6 +5,19 @@ from utils import ui_utils
 from utils.ui_utils import console
 from telethon.tl.types import Channel, Chat, User
 
+
+def code_delivery_label(sent_code):
+    """Describe Telegram's chosen login-code delivery channel without exposing it."""
+    type_name = type(getattr(sent_code, "type", None)).__name__
+    labels = {
+        "SentCodeTypeApp": "the Telegram app on another logged-in device",
+        "SentCodeTypeSms": "SMS",
+        "SentCodeTypeEmailCode": "email",
+        "SentCodeTypeCall": "a phone call",
+        "SentCodeTypeFragmentSms": "Fragment SMS",
+    }
+    return labels.get(type_name, "Telegram's selected delivery channel")
+
 def slugify(text):
     """
     Makes a string safe for filenames by removing non-alphanumeric chars.

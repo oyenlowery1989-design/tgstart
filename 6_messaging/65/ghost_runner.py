@@ -17,6 +17,7 @@ import uuid
 import re
 import difflib
 from collections import deque
+from types import SimpleNamespace
 
 try:
     from telethon.tl.types import UpdateChatInviteImporter
@@ -27,12 +28,12 @@ except ImportError:
 ANONYMOUS_ADMIN_ID = 1087968824  # Telegram's "GroupAnonymousBot" account id
 
 # --- Configuration ---
-load_dotenv()
-if not os.getenv("API_ID"):
-    load_dotenv(".env.local")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env")
+load_dotenv(PROJECT_ROOT / ".env.local")
 
-API_ID = int(os.getenv("API_ID", 0))
-API_HASH = os.getenv("API_HASH", "")
+API_ID = int(os.getenv("API_ID") or os.getenv("MAIN_API_ID", 0))
+API_HASH = os.getenv("API_HASH") or os.getenv("MAIN_API_HASH", "")
 SESSION_NAME = os.getenv("SESSION_NAME", "ghost_session")
 DATA_DIR = Path(os.getenv("DATA_DIR", "data"))
 MAX_BIO_QUEUE_SIZE = int(os.getenv("BIO_QUEUE_SIZE", 500))
@@ -273,6 +274,26 @@ class ConfigManager:
         self.mirrors_path = mirrors_path
         self.config_cache: Dict[int, Dict[str, Any]] = {}
 
+    def _load_env_mirrors(self):
+        raw = os.getenv("GHOST_MIRRORS", "").strip()
+        if not raw:
+            return
+        for pair in raw.split(","):
+            try:
+                source, destination = (part.strip() for part in pair.split(":", 1))
+                source_id = tl_utils.resolve_id(int(source))[0]
+                destination_id = tl_utils.resolve_id(int(destination))[0]
+            except (TypeError, ValueError):
+                logger.warning(f"Ignoring invalid GHOST_MIRRORS entry: {pair!r}")
+                continue
+            self.db.execute(
+                "INSERT INTO chats (chat_id, title, backup_chat_id, monitored) VALUES (?, ?, ?, 1) "
+                "ON CONFLICT(chat_id) DO UPDATE SET backup_chat_id=excluded.backup_chat_id, monitored=1",
+                (source_id, f"Chat {source_id}", destination_id),
+            )
+            self.db.execute("INSERT OR IGNORE INTO config (chat_id) VALUES (?)", (source_id,))
+        logger.info("Loaded mirror mappings from GHOST_MIRRORS.")
+
     def load_initial_config(self):
         """
         1. Load mirrors.json
@@ -280,8 +301,10 @@ class ConfigManager:
         3. Insert default config if missing
         4. Load final config from DB (overrides)
         """
+        self._load_env_mirrors()
         if not os.path.exists(self.mirrors_path):
             logger.warning(f"{self.mirrors_path} not found. Skipping initial seed.")
+            self.refresh_config_cache()
             return
 
         try:
@@ -292,14 +315,12 @@ class ConfigManager:
                 chat_id = m.get("chat_id")
                 if not chat_id: continue
                 
-                # 1. Update Chats Table
+                # 1. Seed Chats Table. Existing rows are dashboard-managed and must
+                # never be reset from this bootstrap file on a runner restart.
                 self.db.execute("""
                     INSERT INTO chats (chat_id, title, backup_chat_id, monitored)
                     VALUES (?, ?, ?, 1)
-                    ON CONFLICT(chat_id) DO UPDATE SET
-                    title=excluded.title,
-                    backup_chat_id=excluded.backup_chat_id,
-                    monitored=1
+                    ON CONFLICT(chat_id) DO NOTHING
                 """, (chat_id, m.get("title", "Unknown"), m.get("backup_chat_id")))
                 
                 # 2. Insert Default Config if not exists
@@ -401,6 +422,14 @@ class AuditLogger:
 
 # --- Ghost Runner ---
 class GhostRunner:
+    @staticmethod
+    def _db_chat_id(chat_id):
+        """Convert Telethon's marked peer IDs to the positive IDs stored in SQLite."""
+        try:
+            return tl_utils.resolve_id(chat_id)[0]
+        except (TypeError, ValueError):
+            return chat_id
+
     def __init__(self, session_name: str = None):
         self.db = DatabaseManager(DB_PATH)
         self.config_mgr = ConfigManager(self.db)
@@ -426,6 +455,7 @@ class GhostRunner:
              
         logger.info(f"Using session: {session_path}")
         self.client = TelegramClient(session_path, API_ID, API_HASH)
+        self._entity_cache = {}
         
         # Message Index for Diffs/Recovery: {chat_id: {msg_id: {"text": "...", "media": {...}}}}
         self.message_cache = {}
@@ -503,6 +533,31 @@ class GhostRunner:
             return f"@{username}"
         return f"user {user_id}"
 
+    async def _resolve_chat_entity(self, chat_id):
+        """Resolve configured chat IDs with their Telegram peer type.
+
+        Basic-group IDs must be passed as PeerChat; a positive integer otherwise
+        gets interpreted by Telethon as PeerUser after a fresh process start.
+        """
+        cached = self._entity_cache.get(int(chat_id))
+        if cached is not None:
+            return cached
+        row = self.db.execute("SELECT type FROM chats WHERE chat_id=?", (chat_id,)).fetchone()
+        chat_type = row["type"] if row else None
+        if chat_type == "group":
+            return await self.client.get_input_entity(tl_types.PeerChat(chat_id))
+        if chat_type in {"channel", "supergroup"}:
+            return await self.client.get_input_entity(tl_types.PeerChannel(chat_id))
+        return await self.client.get_input_entity(chat_id)
+
+    def _chat_ref(self, chat_id) -> str:
+        row = self.db.execute(
+            "SELECT title, type FROM chats WHERE chat_id=?", (chat_id,)
+        ).fetchone()
+        if not row:
+            return f"{chat_id} (unknown)"
+        return f"{row['title']} [{chat_id}, {row['type'] or 'unknown'}]"
+
     async def _maybe_record_sender(self, event):
         """Best-effort: record the sender of a NewMessage/MessageEdited event without an
         extra API round-trip (Telethon events already carry/cache the sender)."""
@@ -556,7 +611,7 @@ class GhostRunner:
             # This is a bit expensive so we might limit total or just load per chat on demand?
             # Phase 3 limitation: simple bulk load of recent
             cur = self.db.execute("""
-                SELECT chat_id, message_id, text, media_meta, dest_message_id
+                SELECT chat_id, message_id, user_id, text, media_meta, dest_message_id
                 FROM messages
                 ORDER BY ts DESC
                 LIMIT 5000
@@ -572,6 +627,7 @@ class GhostRunner:
                 # Here we just store the dict form directly
                 self.message_cache[c_id][r["message_id"]] = {
                     "text": r["text"] or "",
+                    "user_id": r["user_id"],
                     "media_meta": json.loads(r["media_meta"]) if r["media_meta"] else {},
                     "dest_message_id": r["dest_message_id"] if "dest_message_id" in r.keys() else None
                 }
@@ -579,7 +635,7 @@ class GhostRunner:
         except Exception as e:
             logger.error(f"Failed to hydrate cache: {e}")
 
-    def _cache_message(self, chat_id: int, message_id: int, text: str, media: Any):
+    def _cache_message(self, chat_id: int, message_id: int, text: str, media: Any, user_id=None):
         # 1. Update In-Memory (preserve dest_message_id set later by mirror_message)
         if chat_id not in self.message_cache:
             self.message_cache[chat_id] = {}
@@ -588,6 +644,7 @@ class GhostRunner:
         mm = self._get_media_meta(media)
         self.message_cache[chat_id][message_id] = {
             "text": text or "",
+            "user_id": user_id if user_id is not None else existing.get("user_id"),
             "media_meta": mm,
             "dest_message_id": existing.get("dest_message_id")
         }
@@ -604,13 +661,12 @@ class GhostRunner:
                 ON CONFLICT(chat_id, message_id) DO UPDATE SET
                     text=excluded.text,
                     media_meta=excluded.media_meta,
+                    user_id=COALESCE(excluded.user_id, messages.user_id),
                     ts=excluded.ts
             """, (
                 chat_id,
                 message_id,
-                None, # We don't have user_id easily in this sig, would need to update sig or pass it.
-                      # But for 'cache' purposes we mostly need text/media.
-                      # Ideally we pass user_id too.
+                user_id,
                 text,
                 json.dumps(mm),
                 datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -626,12 +682,12 @@ class GhostRunner:
         
         # 2. Try DB (Cache Miss Fallback)
         try:
-            cur = self.db.execute("SELECT text, media_meta FROM messages WHERE chat_id=? AND message_id=?", (chat_id, message_id))
+            cur = self.db.execute("SELECT user_id, text, media_meta FROM messages WHERE chat_id=? AND message_id=?", (chat_id, message_id))
             row = cur.fetchone()
             if row:
                 # Hydrate back to memory optionally, or just return
                 mm = json.loads(row["media_meta"]) if row["media_meta"] else {}
-                return {"text": row["text"] or "", "media_meta": mm}
+                return {"user_id": row["user_id"], "text": row["text"] or "", "media_meta": mm}
         except Exception as e:
             logger.warning(f"DB lookup failed for message {message_id}: {e}")
             
@@ -710,7 +766,13 @@ class GhostRunner:
         # 2.5. Sync Dialogs (Populate DB)
         # We do this after connect so we have access to dialogs
         await self._sync_dialogs()
-        
+
+        if getattr(self, "setup_only", False):
+            self._terminal_setup()
+            await self.audit.stop()
+            self.db.close()
+            return
+
         # 3. Register Handlers
         self._register_handlers()
         
@@ -732,6 +794,7 @@ class GhostRunner:
             count = 0
             async for dialog in self.client.iter_dialogs(limit=None):
                 entity = dialog.entity
+                self._entity_cache[int(entity.id)] = dialog.input_entity
                 
                 # Determine type
                 c_type = "unknown"
@@ -766,18 +829,63 @@ class GhostRunner:
         except Exception as e:
             logger.error(f"Dialog sync failed: {e}")
 
+    def _terminal_setup(self):
+        """Choose a source/destination mapping using the same SQLite config as the dashboard."""
+        current = self.db.execute(
+            "SELECT src.title AS source, dst.title AS destination "
+            "FROM chats src JOIN chats dst ON dst.chat_id = src.backup_chat_id "
+            "WHERE src.monitored = 1 AND src.backup_chat_id IS NOT NULL LIMIT 1"
+        ).fetchone()
+        if current:
+            print(f"\nCurrent mirror: {current['source']} -> {current['destination']}")
+            if input("Keep this mapping? [Y/n]: ").strip().lower() not in ("n", "no"):
+                return
+
+        rows = [
+            row for row in self.db.execute(
+                "SELECT chat_id, title, type FROM chats "
+                "WHERE type IN ('channel','supergroup','group') ORDER BY title"
+            ).fetchall()
+            if int(row["chat_id"]) in self._entity_cache
+        ]
+        if len(rows) < 2:
+            print("Need at least two groups/channels to configure a mirror.")
+            return
+        print("\nGhost Mirror groups:")
+        for i, row in enumerate(rows, 1):
+            print(f"{i}. {row['title']} [{row['type']}] ({row['chat_id']})")
+        def choose(prompt):
+            while True:
+                try:
+                    value = int(input(prompt))
+                    if 1 <= value <= len(rows):
+                        return rows[value - 1]
+                except (ValueError, EOFError):
+                    pass
+                print(f"Choose a number from 1 to {len(rows)}.")
+        source = choose("Source group (mirror FROM): ")
+        destination = choose("Destination group (mirror TO): ")
+        if source["chat_id"] == destination["chat_id"]:
+            print("Source and destination must be different.")
+            return
+        self.db.execute("UPDATE chats SET monitored = 1, backup_chat_id = ? WHERE chat_id = ?", (destination["chat_id"], source["chat_id"]))
+        self.db.execute("INSERT OR IGNORE INTO config (chat_id) VALUES (?)", (source["chat_id"],))
+        self.db.execute("UPDATE config_meta SET value = ? WHERE key = 'config_bump'", (str(datetime.datetime.now().timestamp()),))
+        print(f"Saved: {source['title']} -> {destination['title']}")
+        print(f"For VPS: GHOST_MIRRORS={source['chat_id']}:{destination['chat_id']}")
+
     def _register_handlers(self):
         """Register all Telethon event handlers."""
         # New Messages
         self.client.add_event_handler(
             self._handle_new_message, 
-            events.NewMessage(incoming=True)
+            events.NewMessage()
         )
         
         # Message Edits
         self.client.add_event_handler(
             self._handle_message_edit,
-            events.MessageEdited(incoming=True)
+            events.MessageEdited()
         )
         
         # Message Deletes
@@ -808,8 +916,21 @@ class GhostRunner:
         await self.process_event(event, "message_edit")
             
     async def _handle_message_delete(self, event):
-        # Deletes are special, they might be bulk
-        await self.process_event(event, "message_delete")
+        if getattr(event, "chat_id", None):
+            await self.process_event(event, "message_delete")
+            return
+        for message_id in event.deleted_ids:
+            rows = self.db.execute(
+                "SELECT m.chat_id FROM messages m JOIN chats c ON c.chat_id=m.chat_id "
+                "WHERE m.message_id=? AND c.monitored=1", (message_id,)
+            ).fetchall()
+            if len(rows) == 1:
+                await self.process_event(
+                    SimpleNamespace(chat_id=rows[0]["chat_id"], deleted_ids=[message_id]),
+                    "message_delete",
+                )
+            else:
+                logger.warning(f"Delete {message_id} has no unambiguous monitored chat context.")
 
     async def _handle_chat_action(self, event):
         # Map chat actions to internal event types (existing plain join/leave audit logging,
@@ -913,7 +1034,7 @@ class GhostRunner:
             backup_id = config.get("backup_chat_id")
             if backup_id:
                 try:
-                    await self.client.send_message(backup_id, action_text)
+                    await self.client.send_message(await self._resolve_chat_entity(backup_id), action_text)
                 except Exception as e:
                     logger.warning(f"Failed to mirror member event for user {user_id}: {e}")
         except Exception as e:
@@ -967,7 +1088,7 @@ class GhostRunner:
             backup_id = config.get("backup_chat_id")
             if backup_id:
                 try:
-                    await self.client.send_message(backup_id, action_text)
+                    await self.client.send_message(await self._resolve_chat_entity(backup_id), action_text)
                 except Exception as e:
                     logger.warning(f"Failed to mirror invite join for user {user_id}: {e}")
         except Exception as e:
@@ -1054,7 +1175,7 @@ class GhostRunner:
                 if backup_id and dest_msg_id:
                     try:
                         await self.client.send_message(
-                            backup_id,
+                            await self._resolve_chat_entity(backup_id),
                             f"{emoji} Reaction (by {authors_str})",
                             reply_to=dest_msg_id
                         )
@@ -1150,7 +1271,7 @@ class GhostRunner:
             backup_id = config.get("backup_chat_id")
             if backup_id:
                 try:
-                    await self.client.send_message(backup_id, action_text)
+                    await self.client.send_message(await self._resolve_chat_entity(backup_id), action_text)
                 except Exception as e:
                     logger.warning(f"Failed to mirror participant change for user {user_id}: {e}")
         except Exception as e:
@@ -1174,6 +1295,7 @@ class GhostRunner:
             
             if not chat_id:
                 return # Can't process without context
+            chat_id = self._db_chat_id(chat_id)
                 
             # 1. Toggle Check (Fast Fail - Gate 0)
             if not self.config_mgr.is_monitored(chat_id):
@@ -1202,6 +1324,9 @@ class GhostRunner:
 
             # Fast output if nothing to do
             if not should_log and not should_action:
+                if event_type == "message_new" and (config.get("toggle_edits", True) or config.get("toggle_deletes", True)):
+                    msg = telethon_event.message
+                    self._cache_message(chat_id, msg.id, msg.text, msg.media, msg.sender_id)
                 return
 
             # 3. Normalize Event
@@ -1213,6 +1338,8 @@ class GhostRunner:
             # 4. Action Execution (Mirroring)
             if event_type == "message_new" and should_action:
                 asyncio.create_task(self.mirror_message(telethon_event, config))
+            elif event_type in ("message_edit", "message_delete"):
+                asyncio.create_task(self._mirror_change(telethon_event, config, event_type, chat_id))
             
             # 5. Logging Execution
             if should_log:
@@ -1220,6 +1347,35 @@ class GhostRunner:
             
         except Exception as e:
             logger.error(f"Error processing {event_type}: {e}")
+
+    async def _mirror_change(self, event, config: Dict[str, Any], event_type: str, chat_id: int):
+        backup_id = config.get("backup_chat_id")
+        if not backup_id:
+            return
+        row = self.db.execute("SELECT title FROM chats WHERE chat_id=?", (chat_id,)).fetchone()
+        title = row["title"] if row else str(chat_id)
+        message_ids = getattr(event, "deleted_ids", None) if event_type == "message_delete" else [event.id]
+        for message_id in message_ids or []:
+            try:
+                reply_to = self._get_dest_message_id(chat_id, message_id)
+                if event_type == "message_edit":
+                    text = (event.message.text or "[media/no text]")[:3500]
+                    author = self._get_display_name(event.message.sender_id)
+                    notice = f"✏️ {author} edited a message in {title} (#{message_id}):\n{text}"
+                else:
+                    cached = self._get_message_from_cache_or_db(chat_id, message_id)
+                    text = (cached or {}).get("text", "[original text unavailable]")[:3500]
+                    author = self._get_display_name((cached or {}).get("user_id"))
+                    notice = f"🗑️ A message by {author} was deleted in {title} (#{message_id}):\n{text}"
+                backup_entity = await self._resolve_chat_entity(backup_id)
+                await self.client.send_message(backup_entity, notice, reply_to=reply_to)
+                logger.info(f"Sent {event_type} notification for {chat_id}:{message_id}")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to send {event_type} notification for "
+                    f"{self._chat_ref(chat_id)} -> {self._chat_ref(backup_id)} "
+                    f"(message {message_id}): {e}"
+                )
 
     async def _config_refresh_loop(self):
         """Periodically refresh config if bump timestamp changes."""
@@ -1262,7 +1418,7 @@ class GhostRunner:
             base_event["media_meta"] = self._get_media_meta(msg.media)
             
             # Cache for future edits/deletes
-            self._cache_message(chat_id, msg.id, msg.text, msg.media)
+            self._cache_message(chat_id, msg.id, msg.text, msg.media, msg.sender_id)
 
         elif event_type == "message_edit":
             msg = event.message
@@ -1284,7 +1440,7 @@ class GhostRunner:
                  base_event["diff"] = None
                  
             # Update cache
-            self._cache_message(chat_id, msg.id, msg.text, msg.media)
+            self._cache_message(chat_id, msg.id, msg.text, msg.media, msg.sender_id)
 
         elif event_type == "message_delete":
              # deleted_ids is a list
@@ -1319,9 +1475,10 @@ class GhostRunner:
         2. If forward fails: Retry once after short delay.
         3. If retry fails: Fallback to COPY (send_message with file=media).
         """
+        chat_id = self._db_chat_id(event.chat_id)
         backup_id = config.get("backup_chat_id")
         if not backup_id:
-            logger.warning(f"Skipping mirroring for {event.chat_id}: monitored=True but backup_chat_id is missing.")
+            logger.warning(f"Skipping mirroring for {chat_id}: monitored=True but backup_chat_id is missing.")
             return
 
         reply_to_dst_id = None
@@ -1329,7 +1486,7 @@ class GhostRunner:
         if event.message.reply_to:
             reply_to_src_id = event.message.reply_to.reply_to_msg_id
             if reply_to_src_id:
-                reply_to_dst_id = self._get_dest_message_id(event.chat_id, reply_to_src_id)
+                reply_to_dst_id = self._get_dest_message_id(chat_id, reply_to_src_id)
                 if not reply_to_dst_id:
                     reply_context_note = "↪️ Replying to an old/missing message"
 
@@ -1337,18 +1494,18 @@ class GhostRunner:
             try:
                 if event.message.media:
                     sent = await self.client.send_file(
-                        backup_id,
+                        await self._resolve_chat_entity(backup_id),
                         event.message.media,
                         caption=event.message.text,
                         reply_to=reply_to_dst_id
                     )
                 else:
                     sent = await self.client.send_message(
-                        backup_id,
+                        await self._resolve_chat_entity(backup_id),
                         event.message.text or "",
                         reply_to=reply_to_dst_id
                     )
-                self._record_mirror_result(event.chat_id, event.id, self._extract_sent_id(sent))
+                self._record_mirror_result(chat_id, event.id, self._extract_sent_id(sent))
                 return
             except Exception as e:
                 logger.warning(f"Threaded reply copy failed for {event.id}: {e}. Falling back to forward.")
@@ -1356,17 +1513,23 @@ class GhostRunner:
 
         try:
             # 1. Try Forward
-            sent = await self.client.forward_messages(backup_id, event.message)
-            self._record_mirror_result(event.chat_id, event.id, self._extract_sent_id(sent))
+            sent = await self.client.forward_messages(await self._resolve_chat_entity(backup_id), event.message)
+            self._record_mirror_result(chat_id, event.id, self._extract_sent_id(sent))
         except Exception as e:
-            logger.warning(f"Forward failed for {event.id}: {e}. Retrying...")
+            logger.warning(
+                f"Forward failed {self._chat_ref(chat_id)} -> {self._chat_ref(backup_id)} "
+                f"(message {event.id}): {e}. Retrying..."
+            )
             # 2. Retry
             await asyncio.sleep(1)
             try:
-                sent = await self.client.forward_messages(backup_id, event.message)
-                self._record_mirror_result(event.chat_id, event.id, self._extract_sent_id(sent))
+                sent = await self.client.forward_messages(await self._resolve_chat_entity(backup_id), event.message)
+                self._record_mirror_result(chat_id, event.id, self._extract_sent_id(sent))
             except Exception as e2:
-                logger.warning(f"Retry forward failed for {event.id}: {e2}. Fallback to COPY.")
+                logger.warning(
+                    f"Retry forward failed {self._chat_ref(chat_id)} -> {self._chat_ref(backup_id)} "
+                    f"(message {event.id}): {e2}. Fallback to COPY."
+                )
 
                 # 3. Fallback to Copy
                 try:
@@ -1374,7 +1537,7 @@ class GhostRunner:
                     if event.message.media:
                         # Send file explicitly with caption
                         sent = await self.client.send_file(
-                            backup_id,
+                            await self._resolve_chat_entity(backup_id),
                             event.message.media,
                             caption=event.message.text,
                             reply_to=None
@@ -1382,17 +1545,17 @@ class GhostRunner:
                     else:
                         # Just text
                         sent = await self.client.send_message(
-                            backup_id,
+                            await self._resolve_chat_entity(backup_id),
                             event.message.text,
                             reply_to=None
                         )
-                    self._record_mirror_result(event.chat_id, event.id, self._extract_sent_id(sent))
+                    self._record_mirror_result(chat_id, event.id, self._extract_sent_id(sent))
 
                     # 4. Log Fallback
                     await self.audit.log_event({
                         "event_type": "mirror_fallback_copy",
                         "ts_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                        "chat_id": event.chat_id,
+                        "chat_id": chat_id,
                         "message_id": event.id,
                         "message_id": event.id,
                         "error": str(e2)
@@ -1403,16 +1566,18 @@ class GhostRunner:
                     await self.audit.log_event({
                         "event_type": "mirror_failed_total",
                         "ts_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                        "chat_id": event.chat_id,
+                        "chat_id": chat_id,
                         "message_id": event.id,
                         "error": str(e3)
                     })
 
         if reply_context_note:
-            dest_id = self._get_dest_message_id(event.chat_id, event.id)
+            dest_id = self._get_dest_message_id(chat_id, event.id)
             if dest_id:
                 try:
-                    await self.client.send_message(backup_id, reply_context_note, reply_to=dest_id)
+                    await self.client.send_message(
+                        await self._resolve_chat_entity(backup_id), reply_context_note, reply_to=dest_id
+                    )
                 except Exception as e:
                     logger.warning(f"Failed to post reply-context note for {event.id}: {e}")
 
@@ -1430,16 +1595,11 @@ class GhostRunner:
 
 def select_session():
     """Interactive session selector"""
-    # 1. Look for 'sessions' folder
-    sessions_dir = Path("sessions")
-    if not sessions_dir.exists():
-        # Fallback to checking root or data dir? 
-        # User specifically said "folder session", so likely "sessions"
-        return None
-
-    files = list(sessions_dir.glob("*.session"))
+    sessions_dir = PROJECT_ROOT / "sessions"
+    files = list(sessions_dir.glob("*.session")) if sessions_dir.exists() else []
     if not files:
-        return None
+        print("No saved sessions. Run the root launcher and choose Login / Add New Account first.")
+        return ""
 
     print("\nAvailable Sessions:")
     for idx, f in enumerate(files):
@@ -1457,10 +1617,7 @@ def select_session():
                 return None # Use default
                 
             if 1 <= val <= len(files):
-                # Return path without extension, relative to CWD
-                # Telethon adds .session
                 selected = files[val-1]
-                # We return "sessions/filename" (stripped)
                 return str(selected.with_suffix(''))
                 
         except ValueError:
@@ -1470,16 +1627,24 @@ def select_session():
 async def main():
     # Try selection
     selected_session = None
-    if sys.stdin.isatty():
+    autostart = os.getenv("GHOST_AUTOSTART", "").lower() in ("1", "true", "yes")
+    if sys.stdin.isatty() and not autostart:
         try:
             selected_session = select_session()
         except Exception as e:
             logger.warning(f"Session selection skipped: {e}")
     else:
-        logger.info("No TTY on stdin; skipping interactive session selection, using default session.")
+        logger.info("Autostart/no TTY: using SESSION_NAME and GHOST_MIRRORS from environment.")
+
+    if selected_session == "":
+        return
 
     runner = GhostRunner(session_name=selected_session)
+    runner.setup_only = "--setup" in sys.argv
     await runner.start()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, EOFError):
+        logger.info("GhostRunner interrupted by user.")

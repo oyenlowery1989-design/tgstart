@@ -7,6 +7,7 @@ export type SessionResult = {
   name: string;
   status: "ACTIVE" | "INVALID" | "ERROR" | "UNKNOWN";
   details: string;
+  phone?: string;
 };
 
 export type SessionListData = {

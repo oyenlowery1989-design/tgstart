@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 # Add parent directory to path so we can find utils
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils import ui_utils
+from utils import ui_utils, tg_utils
 from utils.ui_utils import console
 
 # Load environment variables
@@ -90,7 +90,7 @@ async def login_phone(client):
     phone = console.input("\n[cyan]📱 Enter your phone number (e.g., +1234567890): [/cyan]").strip()
     
     try:
-        await client.send_code_request(phone)
+        sent = await client.send_code_request(phone)
     except errors.FloodWaitError as e:
         ui_utils.print_error(f"Too many attempts. Please wait {e.seconds} seconds.")
         return False
@@ -98,10 +98,11 @@ async def login_phone(client):
         ui_utils.print_error(f"Error sending code: {e}")
         return False
 
+    console.print(f"[dim]Telegram sent the code via {tg_utils.code_delivery_label(sent)}.[/dim]")
     code = console.input("[cyan]📩 Enter the code you received: [/cyan]").strip()
     
     try:
-        await client.sign_in(phone, code)
+        await client.sign_in(phone, code, phone_code_hash=sent.phone_code_hash)
         return True
     except errors.SessionPasswordNeededError:
         return await handle_2fa(client)

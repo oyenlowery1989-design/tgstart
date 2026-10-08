@@ -9,6 +9,7 @@ import base64
 import binascii
 import os
 import secrets
+from urllib.parse import urlparse
 from fastapi import HTTPException
 from starlette.requests import HTTPConnection
 from dotenv import load_dotenv
@@ -17,15 +18,38 @@ load_dotenv()
 
 DASHBOARD_USER = os.getenv("DASHBOARD_USER", "admin")
 DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "")
+DASHBOARD_PUBLIC_ORIGIN = os.getenv("DASHBOARD_PUBLIC_ORIGIN", "").rstrip("/")
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
+def remote_binding_has_https_origin(host: str, public_origin: str) -> bool:
+    if host in LOOPBACK_HOSTS:
+        return True
+    parsed = urlparse(public_origin)
+    return (
+        parsed.scheme == "https"
+        and bool(parsed.netloc)
+        and parsed.path in ("", "/")
+        and not parsed.params
+        and not parsed.query
+        and not parsed.fragment
+    )
+
+
+def is_secure_request(client_host: str | None, scheme: str, public_origin: str) -> bool:
+    if client_host in LOOPBACK_HOSTS and not public_origin:
+        return True
+    return bool(public_origin) and scheme in {"https", "wss"}
+
+
 def require_auth(conn: HTTPConnection) -> None:
+    client_host = conn.client.host if conn.client else None
+    if not is_secure_request(client_host, conn.scope["scheme"], DASHBOARD_PUBLIC_ORIGIN):
+        raise HTTPException(status_code=403, detail="Remote dashboard access requires HTTPS")
     if not DASHBOARD_PASSWORD:
         # Fail closed regardless of how the app was launched (python dashboard/app.py
         # vs a bare `uvicorn dashboard.app:app --host 0.0.0.0`): without a password,
         # only loopback clients may proceed.
-        client_host = conn.client.host if conn.client else None
         if client_host not in LOOPBACK_HOSTS:
             raise HTTPException(status_code=403, detail="Dashboard requires DASHBOARD_PASSWORD for non-loopback access")
         return

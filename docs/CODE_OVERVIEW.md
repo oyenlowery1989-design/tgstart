@@ -54,6 +54,11 @@ A comprehensive set of tools to manage your Telegram automation. Each step build
     internally; its routes read the same `6_messaging/65/data/ghost.db` SQLite backend.
   - **Config:** dashboard gated by `DASHBOARD_PASSWORD` (HTTP Basic Auth, fail-closed on
     non-loopback host).
+  - Dashboard-managed Telegram workers share an atomic PID lease, so only one dashboard
+    process launches Ghost Mirror and Bot Reply. Non-loopback deployments additionally
+    require `DASHBOARD_PUBLIC_ORIGIN=https://...`; cleartext remote requests are rejected.
+  - Dashboard WebSockets validate same-origin before accepting connections. Mutating HTTP
+    routes use the double-submit CSRF token.
   - The older `6_messaging/64_claude_edition/` (CLI-only forensics edition) and
     `6_messaging/65/dashboard.py` (its standalone dashboard pair) have both been retired;
     see git history, not this file, for their design.
@@ -72,6 +77,15 @@ credentials, which must never be committed:
 Everything else (which chats reply, trigger mode, provider/model choice, persona
 overrides) is configured live from `/reply/setup` and hot-reloads within ~2s via the
 same `config_bump` polling pattern Ghost Mirror uses — no restart needed.
+The settings endpoint accepts only existing saved sessions, known providers/modes, safe
+model names, and bounded history/TTL/group-size values. Approval callbacks are restricted
+to `BOT_REPLY_OPERATOR_USER_ID`.
+
+### Session lifecycle safety
+
+Session verification takes the same per-session lock used by dashboard jobs. Phone and QR
+login flows expire after 10 minutes; expiration and dashboard shutdown disconnect clients
+and remove temporary session files.
 
 ### 5. Utilities (`7_utilities/`)
 

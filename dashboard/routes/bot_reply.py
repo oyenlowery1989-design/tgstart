@@ -1,5 +1,6 @@
 """Bot Reply tab: pending-approval queue, per-chat config, and runner settings."""
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -21,6 +22,71 @@ from dashboard.tg_client import make_client, session_lock
 from dashboard.templates_env import render_template as _render_template
 
 router = APIRouter(prefix="/reply")
+
+_PROVIDERS = {"vertex", "anthropic"}
+_TRIGGER_MODES = {"always", "mentions", "off"}
+_MODEL_RE = re.compile(r"[A-Za-z0-9._:/@+-]{1,128}")
+
+
+def validate_settings(payload: dict, sessions: set[str]) -> dict[str, str]:
+    """Validate the complete settings payload before mutating persisted config."""
+    allowed_keys = {
+        "session_name", "provider", "model", "trigger_mode",
+        "small_group_max_size", "draft_ttl_hours", "history_depth",
+    }
+    unknown = set(payload) - allowed_keys
+    if unknown:
+        raise HTTPException(400, f"Unknown setting: {sorted(unknown)[0]}")
+
+    normalized = {}
+    for key, value in payload.items():
+        if key == "session_name":
+            if not isinstance(value, str) or value not in sessions:
+                raise HTTPException(400, "session_name must be an existing saved session")
+            normalized[key] = value
+        elif key == "provider":
+            if not isinstance(value, str) or value not in _PROVIDERS:
+                raise HTTPException(400, "provider must be 'vertex' or 'anthropic'")
+            normalized[key] = value
+        elif key == "trigger_mode":
+            if not isinstance(value, str) or value not in _TRIGGER_MODES:
+                raise HTTPException(400, "trigger_mode must be 'always', 'mentions', or 'off'")
+            normalized[key] = value
+        elif key == "model":
+            if not isinstance(value, str) or (value and not _MODEL_RE.fullmatch(value)):
+                raise HTTPException(400, "model must use up to 128 safe characters")
+            normalized[key] = value
+        elif key == "small_group_max_size":
+            try:
+                if isinstance(value, bool):
+                    raise ValueError
+                number = int(value)
+            except (TypeError, ValueError):
+                raise HTTPException(400, "small_group_max_size must be an integer")
+            if not 1 <= number <= 10_000:
+                raise HTTPException(400, "small_group_max_size must be between 1 and 10000")
+            normalized[key] = str(number)
+        elif key == "history_depth":
+            try:
+                if isinstance(value, bool):
+                    raise ValueError
+                number = int(value)
+            except (TypeError, ValueError):
+                raise HTTPException(400, "history_depth must be an integer")
+            if not 1 <= number <= 50:
+                raise HTTPException(400, "history_depth must be between 1 and 50")
+            normalized[key] = str(number)
+        elif key == "draft_ttl_hours":
+            try:
+                if isinstance(value, bool):
+                    raise ValueError
+                number = float(value)
+            except (TypeError, ValueError):
+                raise HTTPException(400, "draft_ttl_hours must be a number")
+            if not 0.25 <= number <= 168:
+                raise HTTPException(400, "draft_ttl_hours must be between 0.25 and 168")
+            normalized[key] = str(number)
+    return normalized
 
 # Single shared connection, reused across requests (sqlite3 with check_same_thread=False
 # is safe to share in this single-process FastAPI app — matches the pattern
@@ -164,14 +230,9 @@ async def api_set_trigger_mode(chat_id: int, payload: dict):
 @router.post("/api/settings", dependencies=[Depends(require_csrf_header)])
 async def api_update_settings(payload: dict):
     conn = _conn()
-    allowed_keys = {
-        "session_name", "provider", "model", "trigger_mode",
-        "small_group_max_size", "draft_ttl_hours", "history_depth",
-    }
-    for key, value in payload.items():
-        if key not in allowed_keys:
-            raise HTTPException(400, f"Unknown setting: {key}")
-        bot_reply_db.set_setting(conn, key, str(value))
+    settings = validate_settings(payload, set(list_sessions()))
+    for key, value in settings.items():
+        bot_reply_db.set_setting(conn, key, value)
     return {"status": "ok"}
 
 

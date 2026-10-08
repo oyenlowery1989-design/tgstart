@@ -129,6 +129,10 @@ from telethon import Button
 _pending_edits: dict = {}
 
 
+def is_operator_callback(sender_id: Optional[int], operator_user_id: int) -> bool:
+    return sender_id == operator_user_id
+
+
 def _approval_text(row: dict) -> str:
     return (
         f"**{row['chat_title']}** — {row['source_sender']}:\n"
@@ -183,7 +187,11 @@ async def _send_approved_reply(reply_id: int, conn, user_client) -> None:
         print(f"[bot_reply] mark_sent failed for reply {reply_id} after successful send: {e}", file=sys.stderr)
 
 
-async def on_button_callback(event, conn, user_client) -> None:
+async def on_button_callback(event, conn, user_client, operator_user_id: int) -> None:
+    if not is_operator_callback(event.sender_id, operator_user_id):
+        await event.answer("Not authorized.", alert=True)
+        return
+
     data = event.data.decode()
     action, _, id_str = data.partition(":")
     reply_id = int(id_str)
@@ -316,7 +324,7 @@ async def main():
 
     @approval_client.on(events.CallbackQuery())
     async def _on_callback(event):
-        await on_button_callback(event, conn, user_client)
+        await on_button_callback(event, conn, user_client, operator_user_id)
 
     @approval_client.on(events.NewMessage(incoming=True, chats=operator_user_id))
     async def _on_edit_text(event):

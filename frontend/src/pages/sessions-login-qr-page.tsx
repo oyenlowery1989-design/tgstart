@@ -52,9 +52,11 @@ export function SessionsLoginQrPage() {
       } else if (data.state === "need_2fa") {
         setState("need_2fa");
       } else if (data.state === "done") {
+        setQrSrc(null);
         setSessionName(data.session_name ?? "");
         setState("done");
       } else {
+        setQrSrc(null);
         setError(data.error ?? "Unknown error");
         setState("error");
       }

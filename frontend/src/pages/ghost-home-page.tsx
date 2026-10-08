@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { GhostTabs } from "@/components/ghost-tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -17,9 +18,13 @@ import {
 import {
   fetchHome,
   fetchRecentEvents,
+  fetchRunnerStatus,
+  startRunner,
   type GhostEvent,
   type HomeData,
+  type RunnerStatus,
 } from "@/lib/ghost-api";
+import { fetchSessionList, type SessionListData } from "@/lib/sessions-api";
 
 const POLL_INTERVAL_MS = 3000;
 const FEED_MAX_ROWS = 200;
@@ -35,6 +40,11 @@ export function GhostHomePage() {
   const [feed, setFeed] = useState<GhostEvent[]>([]);
   const [freshIds, setFreshIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [runner, setRunner] = useState<RunnerStatus | null>(null);
+  const [sessions, setSessions] = useState<SessionListData | null>(null);
+  const [selectedSession, setSelectedSession] = useState("");
+  const [runnerBusy, setRunnerBusy] = useState(false);
+  const [runnerError, setRunnerError] = useState<string | null>(null);
   const lastTsRef = useRef("");
 
   useEffect(() => {
@@ -53,6 +63,34 @@ export function GhostHomePage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    Promise.all([fetchRunnerStatus(), fetchSessionList()])
+      .then(([status, sessionData]) => {
+        setRunner(status);
+        setSessions(sessionData);
+        setSelectedSession(
+          status.session_name ?? sessionData.active_session ?? sessionData.all_sessions[0] ?? "",
+        );
+      })
+      .catch((e: unknown) =>
+        setRunnerError(e instanceof Error ? e.message : String(e)),
+      );
+  }, []);
+
+  async function handleRunner() {
+    if (!selectedSession) return;
+    setRunnerBusy(true);
+    setRunnerError(null);
+    try {
+      await startRunner(selectedSession);
+      setRunner(await fetchRunnerStatus());
+    } catch (e) {
+      setRunnerError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRunnerBusy(false);
+    }
+  }
 
   // Classic index.html poller, translated: every 3s fetch events strictly
   // after the newest ts we have (API returns ASC / oldest-first), prepend so
@@ -127,6 +165,53 @@ export function GhostHomePage() {
           v{data.schema_version} | Bump: {data.config_bump}
         </Badge>
       </div>
+
+      <Card>
+        <CardContent className="flex flex-wrap items-center gap-3 pt-6">
+          <span className="font-medium">Ghost runner</span>
+          <Badge variant={runner?.running ? "default" : "secondary"}>
+            {runner ? (runner.running ? "Running" : "Stopped") : "Loading..."}
+          </Badge>
+          <label className="flex items-center gap-2 text-sm">
+            Session:
+            <select
+              className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+              value={selectedSession}
+              onChange={(e) => setSelectedSession(e.target.value)}
+              disabled={runnerBusy || !sessions || sessions.all_sessions.length === 0}
+            >
+              <option value="" disabled>
+                Select a session
+              </option>
+              {(sessions?.all_sessions ?? []).map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Button
+            size="sm"
+            disabled={runnerBusy || !selectedSession}
+            onClick={() => void handleRunner()}
+          >
+            {runnerBusy ? "Starting..." : runner?.running ? "Restart" : "Start"}
+          </Button>
+          <Link
+            to="/sessions/login"
+            className="text-muted-foreground hover:text-foreground text-sm underline underline-offset-3"
+          >
+            Add account (phone)
+          </Link>
+          <Link
+            to="/sessions/login/qr"
+            className="text-muted-foreground hover:text-foreground text-sm underline underline-offset-3"
+          >
+            Add account (QR)
+          </Link>
+          {runnerError && <span className="text-destructive text-sm">{runnerError}</span>}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-3 gap-4">
         <Card>

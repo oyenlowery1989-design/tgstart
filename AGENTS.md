@@ -1,0 +1,77 @@
+# AGENTS.md
+
+This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+
+## What this is
+
+A Telethon-based Telegram automation suite: a numbered pipeline of standalone CLI scripts (login, verification, chat/group listing, scraping, monitoring, messaging) launched from one interactive menu (`run.py`), plus two separate "Ghost Mirror" message-mirroring subsystems under `6_messaging/`.
+
+## Commands
+
+Root-level scripts and the web dashboard share one venv and `requirements.txt`
+(this now includes fastapi/uvicorn/jinja2/aiofiles/loguru, merged from the old
+`6_messaging/65/requirements.txt`):
+
+```bash
+python -m venv venv
+venv/bin/pip install -r requirements.txt   # or venv\Scripts\pip on Windows
+cd frontend && npm install && npm run build && cd ..  # builds the new admin dashboard shell (TypeScript + shadcn/ui) — required once (and after frontend changes) before /app/* pages work; the old Jinja2 pages remain the working UI until each page is individually migrated
+python dashboard/app.py                    # primary: web dashboard at http://127.0.0.1:8000
+python run.py                              # fallback: terminal menu, choice 0 to exit
+```
+
+`dashboard/app.py` is the primary, documented way to run the suite: it covers login,
+session verification, chats, group users, scraping, stats, Ghost Mirror, and
+utilities (participation/purge) behind one HTTP Basic auth gate
+(`DASHBOARD_USER`/`DASHBOARD_PASSWORD`), and manages the Ghost Mirror bot
+(`6_messaging/65/ghost_runner.py`) as a supervised subprocess internally.
+
+`run.py`'s terminal menu remains as a minimal fallback for pure-terminal use; its
+choice 8 now launches `dashboard/app.py` directly instead of the old `65`-only
+dashboard pair.
+
+`6_messaging/65/` no longer has its own venv — its dependencies were merged into the
+root `requirements.txt` and its `venv/` directory has been retired.
+
+There is no test suite or CI in this repo for the Python side — don't assume
+`pytest` exists. The frontend/ TypeScript project has `npm run lint` (oxlint)
+available; Python verification is still just `python -m py_compile <file>`.
+
+## Architecture
+
+### Numbered pipeline convention
+
+Each top-level `N_name/` directory is a self-contained stage; scripts inside are prefixed with their stage number (e.g. `31_list_group_users.py` lives in `3_chat_management/`). `run.py` is a thin dispatcher — each menu choice just `subprocess.run`s a script by path, no shared in-process state between stages. When a stage got a "basic" version and later an "advanced" one (`2_verify_login.py` → `2_verify_login_advanced.py`, `40_scrape_links.py` → `41_scrape_links_advanced.py`), only the advanced script is wired into the menu; the superseded one is typically left in place unwired rather than deleted.
+
+Script outputs go to a dedicated `NN_data/` folder next to the script (e.g. `31_data/`), gitignored except for a `.gitkeep`.
+
+### Shared `utils/` package
+
+- `utils/ui_utils.py`: the only sanctioned way to touch `rich` — new scripts should import from here (`console`, `print_header`, `print_error`, `print_success`, `create_table`, `get_progress`), not import `rich` directly.
+- `utils/tg_utils.py`: `pick_target`/`pick_group` (interactive entity pickers), `slugify`.
+
+### Env var convention
+
+Scripts prefer `MAIN_API_ID`/`MAIN_API_HASH`, falling back to `API_ID`/`API_HASH` if unset. `DEFAULT_SESSION` (or `SESSION_NAME` in the messaging subsystems) points at the active `.session` file, typically under `sessions/`. Never hardcode real `API_ID`/`API_HASH` values as fallback defaults in code — this has happened before and required a git-history rewrite to fix; fallback defaults must be `0`/`""`.
+
+Privacy/safety-sensitive behavior is opt-in via env flags, off by default: `EXPORT_PHONE_NUMBERS` and `AGGRESSIVE_SCRAPE` in `3_chat_management/31_list_group_users.py`.
+
+### `6_messaging/`: Ghost Mirror
+
+`65/` is the live, maintained Ghost Mirror implementation. The older `64_claude_edition/` (CLI-only, modular `src/{config,core,handlers,utils}/` layout, JSON/JSONL file-based persistence) has been retired and archived to `6_messaging/_archived_64_claude_edition/` — its feature set was merged into `65`'s dashboard architecture in commit d636a73, and it is no longer wired into `run.py`. Treat it as history, not a parallel design.
+
+- **`65/`**: FastAPI dashboard (`dashboard.py`) + monolithic `ghost_runner.py` (Telethon client, SQLite `DatabaseManager`/`ConfigManager`/`AuditLogger`, all event handling in one file) + SQLite backend (`data/ghost.db`) with schema migrations gated by `PRAGMA user_version`. Per-chat config toggles (`toggle_mirror_new`, `toggle_edits`, `toggle_admin`, `toggle_reactions`, etc.) live in the `config` table and hot-reload into the running bot within ~2s via a polled `config_bump` timestamp — no restart needed to change a chat's settings from the dashboard.
+
+`65`'s dashboard is gated by HTTP Basic auth (`DASHBOARD_USER`/`DASHBOARD_PASSWORD`); if unset, it only binds loopback — it refuses to start bound to a non-loopback host without a password set (fail-closed by design, see the startup check in `dashboard.py`).
+
+`65/ghost_runner.py`'s `messages` table tracks `dest_message_id` (where a source message landed in the backup chat) — this is what lets reactions and replies thread onto the correct mirrored message. When editing `_cache_message`, always update via `ON CONFLICT DO UPDATE` on specific columns, never `INSERT OR REPLACE`, or an edit will silently wipe the recorded `dest_message_id`.
+
+`65/`'s FastAPI dashboard routes have been ported into the root `dashboard/` app under
+`/ghost/*` (see `dashboard/routes/ghost_mirror.py`), reading the same `65/data/ghost.db`
+unchanged. `65/dashboard.py` itself is no longer launched directly — `dashboard/app.py`
+launches `65/run.py` (the bot watchdog) as a subprocess and serves the ported routes
+in-process.
+
+### Adding a new script
+
+Per project convention (previously documented in `docs/GUIDELINES.md`): wrap `asyncio.run()` in try/except for `KeyboardInterrupt`/`EOFError`, save session files under `sessions/`, save data as `.csv` in a dedicated `NN_data/` folder, and add the new script to the menu table in `run.py` so it's reachable.

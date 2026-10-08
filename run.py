@@ -9,10 +9,14 @@ import os
 import sys
 import subprocess
 import time
+from dotenv import load_dotenv
 from utils.ui_utils import console, box
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
+
+load_dotenv()
+load_dotenv(".env.local")
 
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -47,6 +51,13 @@ def run_dashboard(cwd=None):
     input()
 
 def main():
+    if os.getenv("GHOST_AUTOSTART", "").lower() in ("1", "true", "yes"):
+        subprocess.run(
+            [sys.executable, "run.py"],
+            cwd=os.path.join("6_messaging", "65"),
+        )
+        return
+
     while True:
         clear_screen()
         
@@ -69,7 +80,9 @@ def main():
         table.add_row("4", "👥", "List Users in a Group [dim]- scrape a group's member list[/dim]")
         table.add_row("5", "🔗", "Extract Links from Group [dim]- scan message history for URLs[/dim]")
         table.add_row("6", "📊", "Group Analytics & Stats [dim]- message/activity counts for a group[/dim]")
+        table.add_row("7", "👻", "Ghost Mirror (Terminal) [dim]- choose a saved Telegram session; no localhost dashboard[/dim]")
         table.add_row("8", "🛰️", "Web Dashboard [dim]- full suite UI (login, chats, scraping, stats, ghost mirror, utilities) at localhost:8000[/dim]")
+        table.add_row("9", "⚙️", "Configure Ghost Mirror (Terminal) [dim]- choose source and destination groups[/dim]")
         table.add_row("11", "🔍", "Find Chats with My Messages [dim]- audit which chats you've posted in[/dim]")
         table.add_row("12", "🧹", "Self-Destruct (Purge My Messages) [dim]- delete your own messages in a chosen chat[/dim]")
         table.add_row("", "", "")
@@ -91,8 +104,14 @@ def main():
             run_script("4_scraping/41_scrape_links_advanced.py")
         elif choice == "6":
             run_script("5_monitoring/50_group_stats.py")
+        elif choice == "7":
+            if os.getenv("GHOST_AUTOSTART", "").lower() not in ("1", "true", "yes"):
+                run_script("6_messaging/65/ghost_runner.py", args=["--setup"], cwd=os.path.join("6_messaging", "65"))
+            run_script("6_messaging/65/ghost_runner.py", cwd=os.path.join("6_messaging", "65"))
         elif choice == "8":
             run_dashboard()
+        elif choice == "9":
+            run_script("6_messaging/65/ghost_runner.py", args=["--setup"], cwd=os.path.join("6_messaging", "65"))
         elif choice == "11":
             run_script("7_utilities/71_find_my_participation.py")
         elif choice == "12":

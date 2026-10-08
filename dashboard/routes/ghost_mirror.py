@@ -7,6 +7,8 @@ from fastapi import APIRouter, Depends, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse
 
 from dashboard.csrf import require_csrf_header
+from dashboard import ghost_process
+from dashboard.state import list_sessions, session_path
 from dashboard.templates_env import render_template as _render_template
 
 DB_PATH = Path(__file__).resolve().parent.parent.parent / "6_messaging" / "65" / "data" / "ghost.db"
@@ -230,6 +232,22 @@ async def api_home():
         "config_bump": bump['value'] if bump else "0",
         "schema_version": "3",
     }
+
+
+@router.get("/api/runner")
+async def api_runner():
+    return ghost_process.status()
+
+
+@router.post("/api/runner", dependencies=[Depends(require_csrf_header)])
+async def api_start_runner(request: Request, payload: dict):
+    if not getattr(request.app.state, "owns_ghost_worker", False):
+        raise HTTPException(409, "Another dashboard process owns the Ghost worker.")
+    name = payload.get("session_name")
+    if not isinstance(name, str) or name not in list_sessions():
+        raise HTTPException(400, "Select a saved Telegram session first.")
+    ghost_process.start_ghost_bot(Path(session_path(name)), name)
+    return ghost_process.status()
 
 
 @router.get("/api/chats")

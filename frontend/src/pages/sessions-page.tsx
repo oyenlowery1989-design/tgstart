@@ -74,6 +74,8 @@ export function SessionsPage() {
     if (msg) setError(msg);
   }
 
+  const active = data?.results.find((r) => r.name === data.active_session);
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -111,6 +113,15 @@ export function SessionsPage() {
             ))}
           </select>
         </label>
+      )}
+
+      {active?.status === "ACTIVE" && (
+        <div className="border-border bg-card rounded-lg border p-4 text-sm">
+          <div className="font-medium">Connected account</div>
+          <div>{active.details}</div>
+          {active.phone && <div className="text-muted-foreground">Phone: {active.phone}</div>}
+          <div className="text-muted-foreground">Session: {active.name}</div>
+        </div>
       )}
 
       {loading && !data ? (

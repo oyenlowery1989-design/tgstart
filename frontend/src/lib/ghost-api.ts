@@ -25,6 +25,11 @@ export type HomeData = {
   schema_version: string;
 };
 
+export type RunnerStatus = {
+  running: boolean;
+  session_name: string | null;
+};
+
 /**
  * chats row LEFT JOINed with config: every toggle_* is null when the chat
  * has no config row yet — treated as off, matching the classic template's
@@ -123,6 +128,14 @@ async function getJson<T>(url: string): Promise<T> {
 
 export function fetchHome(): Promise<HomeData> {
   return getJson("/ghost/api/home");
+}
+
+export function fetchRunnerStatus(): Promise<RunnerStatus> {
+  return getJson("/ghost/api/runner");
+}
+
+export function startRunner(sessionName: string): Promise<void> {
+  return postOrThrow("/ghost/api/runner", { session_name: sessionName });
 }
 
 export function fetchChats(page: number): Promise<ChatsData> {

@@ -103,9 +103,21 @@ Edit `.env` file:
 API_ID=your_api_id_here
 API_HASH=your_api_hash_here
 PHONE=+1234567890
+
+# Optional: protects the dashboard. Required for non-loopback access.
+DASHBOARD_USER=admin
+DASHBOARD_PASSWORD=choose-a-strong-password
 ```
 
 Get credentials from: https://my.telegram.org/apps
+
+For remote dashboard access, terminate TLS at a reverse proxy and set the public
+HTTPS origin. Plain HTTP remote requests are refused:
+
+```env
+DASHBOARD_HOST=0.0.0.0
+DASHBOARD_PUBLIC_ORIGIN=https://dashboard.example.com
+```
 
 ## 📊 Output Files
 

@@ -16,6 +16,7 @@ import { postForm } from "@/lib/sessions-api";
 type LoginResponse = {
   status: string;
   flow_id?: string;
+  delivery?: string;
   error?: string;
 };
 
@@ -31,6 +32,7 @@ export function SessionsLoginPhonePage() {
   const [flowId, setFlowId] = useState("");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
+  const [delivery, setDelivery] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -57,6 +59,7 @@ export function SessionsLoginPhonePage() {
     if (!r) return;
     if (r.status === "code_sent" && r.flow_id) {
       setFlowId(r.flow_id);
+      setDelivery(r.delivery ?? "Telegram");
       setStep("code");
     } else {
       setError(r.error ?? "Unknown error");
@@ -92,7 +95,11 @@ export function SessionsLoginPhonePage() {
     <Card className="max-w-md">
       <CardHeader>
         <CardTitle>Login via Phone Number</CardTitle>
-        <CardDescription>{STEP_DESCRIPTIONS[step]}</CardDescription>
+        <CardDescription>
+          {step === "code"
+            ? `Check ${delivery}, then enter the code.`
+            : STEP_DESCRIPTIONS[step]}
+        </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {error && (
